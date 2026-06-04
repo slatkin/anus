@@ -7,7 +7,7 @@ PREFIX  ?= $(HOME)/.local
 .PHONY: build-ui build-web dev-ui dev-web test docker-build fmt vet tidy clean install uninstall
 
 build-ui: frontend-wails
-	wails build -tags $(TAGS) -o $(BIN_UI)
+	wails build -tags $(TAGS) -o $(BIN_UI) .
 
 build-web: frontend-web
 	go build -tags production -o $(OUTDIR)/$(BIN_WEB) ./cmd/anus-web
