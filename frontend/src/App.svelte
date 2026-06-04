@@ -305,6 +305,12 @@
   function openArticle(idx) {
     if (idx < 0 || idx >= displayEntries.length) return;
 
+    const prev = selectedEntry;
+    if (prev && prev.status === 'unread' && !keptUnread.has(prev.id)) {
+      mutateEntry(prev.id, e => ({ ...e, status: 'read' }));
+      MarkRead([prev.id]).catch(() => {});
+    }
+
     selectedIdx      = idx;
     cursor           = idx;
     focus            = FOCUS_READER;
@@ -315,11 +321,6 @@
     page = 0;
     scrollCursorIntoView();
     refreshStatus();
-
-    if (selectedEntry.status === 'unread' && !keptUnread.has(selectedEntry.id)) {
-      mutateEntry(selectedEntry.id, e => ({ ...e, status: 'read' }));
-      MarkRead([selectedEntry.id]).catch(() => {});
-    }
   }
 
   // ── actions ───────────────────────────────────────────────────────
@@ -527,7 +528,7 @@
     // Feeds commonly include the caption as both a plain <p> and a <figcaption>,
     // either inside the <figure> or as an adjacent sibling.
     const doc = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html');
-    const norm = t => t.trim().replace(/\s+/g, ' ').toLowerCase();
+    const norm = t => t.toLowerCase().replace(/[^a-z0-9]/g, '');
     doc.querySelectorAll('figure').forEach(fig => {
       const cap = fig.querySelector('figcaption');
       if (!cap) return;
