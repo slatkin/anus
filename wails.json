@@ -3,8 +3,8 @@
   "name": "anus",
   "outputfilename": "anus",
   "frontend:install": "npm install",
-  "frontend:build": "VITE_API=wails npm run build",
-  "frontend:dev:watcher": "VITE_API=wails npm run dev",
+  "frontend:build": "env VITE_API=wails npm run build",
+  "frontend:dev:watcher": "env VITE_API=wails npm run dev",
   "frontend:dev:serverUrl": "auto",
   "wailsdir": "cmd/anus-ui",
   "author": {
