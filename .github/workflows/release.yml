@@ -22,7 +22,7 @@ jobs:
       - name: Update system and install makedeps
         run: |
           pacman -Syu --noconfirm
-          pacman -S --noconfirm --needed go npm imagemagick webkit2gtk-4.1 github-cli git
+          pacman -S --noconfirm --needed go npm imagemagick webkit2gtk-4.1 github-cli git openssh
 
       - name: Run tests
         run: go test ./internal/... ./pkg/...
