@@ -80,20 +80,19 @@ jobs:
         env:
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
         run: |
-          mkdir -p ~/.ssh
-          echo "$AUR_SSH_KEY" > ~/.ssh/aur
-          chmod 600 ~/.ssh/aur
-          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
-          git clone ssh://aur@aur.archlinux.org/anus.git /tmp/aur-anus \
-            --config core.sshCommand="ssh -i ~/.ssh/aur"
+          mkdir -p /root/.ssh
+          echo "$AUR_SSH_KEY" > /root/.ssh/aur
+          chmod 600 /root/.ssh/aur
+          export GIT_SSH_COMMAND="ssh -i /root/.ssh/aur -o StrictHostKeyChecking=accept-new"
+          git clone ssh://aur@aur.archlinux.org/anus.git /tmp/aur-anus
           cp /tmp/repo/packaging/PKGBUILD /tmp/aur-anus/PKGBUILD
           cd /tmp/aur-anus
-          GIT_SSH_COMMAND="ssh -i ~/.ssh/aur" git config user.name "github-actions[bot]"
-          GIT_SSH_COMMAND="ssh -i ~/.ssh/aur" git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           makepkg --printsrcinfo > .SRCINFO
           git add PKGBUILD .SRCINFO
           git diff --staged --quiet || git commit -m "Release v${PKGVER}"
-          GIT_SSH_COMMAND="ssh -i ~/.ssh/aur" git push
+          git push
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
