@@ -62,6 +62,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIT_DISCOVERY_ACROSS_FILESYSTEM: 1
         run: |
           git config --global --add safe.directory '*'
           SHA256=$(sha256sum "${TARBALL}" | cut -d' ' -f1)
