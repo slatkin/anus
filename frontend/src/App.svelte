@@ -681,11 +681,9 @@
             <h1 class="article-title">{selectedEntry.title}</h1>
             <div class="article-meta">{selectedEntry.feed.title}  ·  {fullDate(selectedEntry.published_at)}{selectedEntry.fetched_at ? '  ·  Fetched ' + timeAgo(selectedEntry.fetched_at) : ''}</div>
             <div class="reader-controls">
-              <label class="readability-toggle" title="Readability mode">
-                <input type="checkbox" checked={originalContent !== null} on:change={fetchOriginal}>
-                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              <button class="ctrl-btn" class:active={originalContent !== null} on:click={fetchOriginal} title="Readability mode">
                 <BookOpen size={14}/>
-              </label>
+              </button>
               <div class="ctrl-sep"></div>
               <button class="ctrl-btn" on:click={decreaseFontSize} title="Decrease font size"><Minus size={13}/></button>
               <span class="ctrl-label">A</span>
@@ -1122,39 +1120,6 @@
   }
   .ctrl-btn:hover { background: #2a1f14; color: #c4a882; }
   .ctrl-btn.active { color: #7aa2f7; }
-  .readability-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    cursor: pointer;
-    color: #9a7a58;
-    padding: 3px 4px;
-    border-radius: 3px;
-  }
-  .readability-toggle:hover { background: #2a1f14; color: #c4a882; }
-  .readability-toggle input:checked ~ * { color: #7aa2f7; }
-  .readability-toggle input { display: none; }
-  .toggle-track {
-    width: 28px;
-    height: 16px;
-    background: #3a3a3a;
-    border-radius: 8px;
-    position: relative;
-    transition: background 0.2s;
-    flex-shrink: 0;
-  }
-  .readability-toggle input:checked ~ .toggle-track { background: #7aa2f7; }
-  .toggle-thumb {
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 12px;
-    height: 12px;
-    background: #ccc;
-    border-radius: 50%;
-    transition: left 0.2s;
-  }
-  .readability-toggle input:checked ~ .toggle-track .toggle-thumb { left: 14px; background: #fff; }
 
   /* ── article body (global: rendered HTML) ── */
   .article-body :global(p) {
