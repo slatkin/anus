@@ -52,7 +52,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release create "v${PKGVER}" --title "v${PKGVER}" --generate-notes 2>/dev/null || true
+          gh release view "v${PKGVER}" > /dev/null 2>&1 || \
+            gh release create "v${PKGVER}" --title "v${PKGVER}" --generate-notes
           gh release upload "v${PKGVER}" "${TARBALL}" --clobber
 
       - name: Upload artifact
