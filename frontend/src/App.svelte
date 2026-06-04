@@ -1119,7 +1119,7 @@
     align-items: center;
   }
   .ctrl-btn:hover { background: #2a1f14; color: #c4a882; }
-  .ctrl-btn.active { color: #7aa2f7; }
+  .ctrl-btn.active { background: #7aa2f7; color: #1a1b26; border-radius: 4px; }
 
   /* ── article body (global: rendered HTML) ── */
   .article-body :global(p) {
