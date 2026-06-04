@@ -18,22 +18,21 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/linux"
 )
 
-// uiApp wraps app.App for Wails binding, adding OpenURL and lifecycle hooks.
-type uiApp struct {
+type App struct {
 	*app.App
 	cfg config.Config
 }
 
-func newUIApp(cfg config.Config) *uiApp {
+func newApp(cfg config.Config) *App {
 	client := miniflux.NewClient(cfg.ServerUrl, cfg.ApiKey, cfg.AllowInvalidCerts)
-	return &uiApp{
+	return &App{
 		App: app.New(client, cfg.CacheExpiryDays, cfg.RememberReadPosition),
 		cfg: cfg,
 	}
 }
 
-func (u *uiApp) startup(_ context.Context) {
-	dir := u.cfg.CacheDir
+func (a *App) startup(_ context.Context) {
+	dir := a.cfg.CacheDir
 	if dir == "" {
 		var err error
 		dir, err = cache.DefaultDir()
@@ -42,16 +41,16 @@ func (u *uiApp) startup(_ context.Context) {
 			return
 		}
 	}
-	if err := u.App.Open(dir); err != nil {
+	if err := a.App.Open(dir); err != nil {
 		fmt.Printf("Warning: %v\n", err)
 	}
 }
 
-func (u *uiApp) shutdown(_ context.Context) {
-	u.App.Close()
+func (a *App) shutdown(_ context.Context) {
+	a.App.Close()
 }
 
-func (u *uiApp) OpenURL(url string) {
+func (a *App) OpenURL(url string) {
 	browser.OpenURL(url) //nolint
 }
 
@@ -75,7 +74,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	ui := newUIApp(cfg)
+	a := newApp(cfg)
 
 	err = wails.Run(&options.App{
 		Title:  "anus",
@@ -86,9 +85,9 @@ func main() {
 		},
 		BackgroundColour:         &options.RGBA{R: 0, G: 0, B: 0, A: 0},
 		EnableDefaultContextMenu: true,
-		OnStartup:                ui.startup,
-		OnShutdown:               ui.shutdown,
-		Bind:                     []interface{}{ui},
+		OnStartup:                a.startup,
+		OnShutdown:               a.shutdown,
+		Bind:                     []interface{}{a},
 		Linux: &linux.Options{
 			ProgramName:         "anus",
 			WindowIsTranslucent: true,
