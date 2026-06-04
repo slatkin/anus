@@ -524,27 +524,13 @@
         `<span class="yt-play">▶ Watch on YouTube</span>` +
         `</div>`
     );
-    // Remove paragraphs that duplicate a nearby <figcaption>.
-    // Feeds commonly include the caption as both a plain <p> and a <figcaption>,
-    // either inside the <figure> or as an adjacent sibling.
+    // Ars Technica (and similar feeds) put the caption as both a raw text node
+    // directly inside <figure> AND inside <figcaption>. Strip the text nodes.
     const doc = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html');
-    const norm = t => t.toLowerCase().replace(/[^a-z0-9]/g, '');
     doc.querySelectorAll('figure').forEach(fig => {
-      const cap = fig.querySelector('figcaption');
-      if (!cap) return;
-      const capText = norm(cap.textContent);
-      // Remove matching <p> elements inside the figure
-      fig.querySelectorAll('p').forEach(p => {
-        const t = norm(p.textContent);
-        if (t === capText || capText.includes(t) || t.includes(capText)) p.remove();
-      });
-      // Remove matching <p> siblings immediately before or after the figure
-      for (const sibling of [fig.previousElementSibling, fig.nextElementSibling]) {
-        if (sibling?.tagName === 'P') {
-          const t = norm(sibling.textContent);
-          if (t === capText || capText.includes(t) || t.includes(capText)) sibling.remove();
-        }
-      }
+      if (!fig.querySelector('figcaption')) return;
+      for (const node of [...fig.childNodes])
+        if (node.nodeType === 3 && node.textContent.trim()) node.remove();
     });
     return doc.body.innerHTML;
   }
