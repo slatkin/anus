@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: archlinux/archlinux:base-devel
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update system and install makedeps
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm --needed go npm imagemagick webkit2gtk-4.1 github-cli git
+
+      - name: Run tests
+        run: go test ./internal/... ./pkg/...
+
+      - name: Build binary
+        run: |
+          cd frontend && npm ci && VITE_API=wails npm run build && cd ..
+          go build -tags webkit2_41,production -ldflags "-s -w" -o anus .
+          chmod -R u+w "$(go env GOMODCACHE)" 2>/dev/null || true
+
+      - name: Bundle release tarball
+        run: |
+          PKGVER=${GITHUB_REF_NAME#v}
+          DIST="anus-${PKGVER}"
+          mkdir -p "${DIST}/icons"
+          cp anus "${DIST}/"
+          cp anus.desktop "${DIST}/"
+          for sz in 16 32 48 64 128 256; do
+            mkdir -p "${DIST}/icons/${sz}x${sz}"
+            magick assets/appicon.png -resize "${sz}x${sz}" "${DIST}/icons/${sz}x${sz}/anus.png"
+          done
+          tar czf "${DIST}-linux-x86_64.tar.gz" "${DIST}"
+          echo "TARBALL=${DIST}-linux-x86_64.tar.gz" >> "$GITHUB_ENV"
+          echo "PKGVER=${PKGVER}" >> "$GITHUB_ENV"
+
+      - name: Create or update release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${PKGVER}" --title "v${PKGVER}" --generate-notes 2>/dev/null || true
+          gh release upload "v${PKGVER}" "${TARBALL}" --clobber
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: anus-linux-x86_64
+          path: "*.tar.gz"
+          if-no-files-found: error

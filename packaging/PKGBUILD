@@ -13,11 +13,11 @@ sha256sums=('SKIP')
 package() {
   cd "$pkgname-$pkgver"
 
-  install -Dm755 "anus" "$pkgdir/usr/bin/anus"
-  install -Dm644 "anus.desktop" "$pkgdir/usr/share/applications/anus.desktop"
+  install -Dm755 "$pkgname" "$pkgdir/usr/bin/$pkgname"
+  install -Dm644 "$pkgname.desktop" "$pkgdir/usr/share/applications/$pkgname.desktop"
 
   for sz in 16 32 48 64 128 256; do
-    install -Dm644 "icons/${sz}x${sz}/anus.png" \
-      "$pkgdir/usr/share/icons/hicolor/${sz}x${sz}/apps/anus.png"
+    install -Dm644 "icons/${sz}x${sz}/$pkgname.png" \
+      "$pkgdir/usr/share/icons/hicolor/${sz}x${sz}/apps/$pkgname.png"
   done
 }
