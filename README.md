@@ -2,7 +2,7 @@
 
 **A newsreader, unfussy & simple.**
 
-![anus screenshot](assets/screenshot.png)
+<img src="assets/screenshot.png" width="600" alt="anus screenshot">
 
 anus is a [Miniflux](https://miniflux.app/) reader available as both a native Linux desktop app and a self-hosted web service. Built with Go, Svelte, and [Wails v2](https://wails.io/).
 
