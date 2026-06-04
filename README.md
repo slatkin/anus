@@ -9,7 +9,7 @@ A [Miniflux](https://miniflux.app/) reader available as both a native Linux desk
 | | `anus-ui` | `anus-web` |
 |---|---|---|
 | **What** | Native desktop app (WebKit2GTK) | Containerised web service |
-| **Install** | AUR (`anus-ui`) or build from source | Docker / `docker compose` |
+| **Install** | AUR (`anus`) or build from source | Docker / `docker compose` |
 | **Config** | `~/.config/anus/config.toml` | Environment variables |
 
 ## Features
@@ -70,10 +70,10 @@ docker compose up -d
 
 ```bash
 # Binary release
-yay -S anus-ui
+yay -S anus
 
 # Build from source
-yay -S anus-ui-git
+yay -S anus-git
 ```
 
 #### Build from source

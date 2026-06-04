@@ -1,5 +1,5 @@
 # Maintainer: slatkin <slatkin@gmail.com>
-pkgname=anus-ui-git
+pkgname=anus-git
 pkgver=0.1.0
 pkgrel=1
 pkgdesc='Miniflux desktop reader (git)'
@@ -8,8 +8,8 @@ url='https://github.com/slatkin/anus'
 license=('custom')
 depends=('webkit2gtk-4.1')
 makedepends=('go' 'npm' 'imagemagick' 'git')
-provides=('anus-ui')
-conflicts=('anus-ui')
+provides=('anus')
+conflicts=('anus')
 source=("$pkgname::git+https://github.com/slatkin/anus.git")
 sha256sums=('SKIP')
 
@@ -44,7 +44,7 @@ package() {
   cd "$pkgname"
 
   install -Dm755 anus "$pkgdir/usr/bin/anus"
-  install -Dm644 anus-ui.desktop "$pkgdir/usr/share/applications/anus-ui.desktop"
+  install -Dm644 anus.desktop "$pkgdir/usr/share/applications/anus.desktop"
 
   local icon_src="assets/appicon.png"
   for sz in 16 32 48 64 128 256; do

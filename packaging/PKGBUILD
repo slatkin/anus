@@ -1,5 +1,5 @@
 # Maintainer: slatkin <slatkin@gmail.com>
-pkgname=anus-ui
+pkgname=anus
 pkgver=0.1.0
 pkgrel=1
 pkgdesc='Miniflux desktop reader'
@@ -14,7 +14,7 @@ package() {
   cd "$pkgname-$pkgver"
 
   install -Dm755 "anus" "$pkgdir/usr/bin/anus"
-  install -Dm644 "anus-ui.desktop" "$pkgdir/usr/share/applications/anus-ui.desktop"
+  install -Dm644 "anus.desktop" "$pkgdir/usr/share/applications/anus.desktop"
 
   for sz in 16 32 48 64 128 256; do
     install -Dm644 "icons/${sz}x${sz}/anus.png" \
