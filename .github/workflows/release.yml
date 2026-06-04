@@ -72,8 +72,9 @@ jobs:
           git pull --rebase origin main
           sed -i "s/^pkgver=.*/pkgver=${PKGVER}/" packaging/PKGBUILD
           sed -i "s/^sha256sums=.*/sha256sums=('${SHA256}')/" packaging/PKGBUILD
-          git add packaging/PKGBUILD
-          git diff --staged --quiet || git commit -m "Update PKGBUILD sha256 for v${PKGVER}"
+          sed -i "s/\"productVersion\": \".*\"/\"productVersion\": \"${PKGVER}\"/" wails.json
+          git add packaging/PKGBUILD wails.json
+          git diff --staged --quiet || git commit -m "Release v${PKGVER}: update PKGBUILD sha256 and wails.json version"
           git push origin main
 
       - name: Upload artifact
