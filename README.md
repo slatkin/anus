@@ -19,8 +19,6 @@ A [Miniflux](https://miniflux.app/) reader available as both a native Linux desk
 - Rosé Pine Moon sidebar, sepia reader pane, LexendDeca font
 - Local BoltDB article cache with configurable expiry; falls back to cache when offline
 - Auto-polls Miniflux every 10 minutes for new articles
-- YouTube embeds replaced with clickable thumbnails
-- Collapsible sidebar
 
 ---
 
