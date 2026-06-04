@@ -61,11 +61,12 @@
   let navWidth     = parseInt(localStorage.getItem('navWidth') || '300', 10);
   let navCollapsed = localStorage.getItem('navCollapsed') === 'true';
   let fontSize     = parseInt(localStorage.getItem('readerFontSize') || '16', 10);
-  let keptUnread = new Set();
+  let keptUnread = new Set(JSON.parse(localStorage.getItem('keptUnread') || '[]'));
 
   $: localStorage.setItem('navWidth',       String(navWidth));
   $: localStorage.setItem('navCollapsed',   String(navCollapsed));
   $: localStorage.setItem('readerFontSize', String(fontSize));
+  $: localStorage.setItem('keptUnread', JSON.stringify([...keptUnread]));
 
   function toggleNav() {
     navCollapsed = !navCollapsed;
