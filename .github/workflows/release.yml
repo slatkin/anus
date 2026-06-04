@@ -86,10 +86,12 @@ jobs:
           export GIT_SSH_COMMAND="ssh -i /root/.ssh/aur -o StrictHostKeyChecking=accept-new"
           git clone ssh://aur@aur.archlinux.org/anus.git /tmp/aur-anus
           cp /tmp/repo/packaging/PKGBUILD /tmp/aur-anus/PKGBUILD
+          useradd -m aurbuild
+          chown -R aurbuild /tmp/aur-anus
+          su -c 'cd /tmp/aur-anus && makepkg --printsrcinfo' aurbuild > /tmp/aur-anus/.SRCINFO
           cd /tmp/aur-anus
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          makepkg --printsrcinfo > .SRCINFO
           git add PKGBUILD .SRCINFO
           git diff --staged --quiet || git commit -m "Release v${PKGVER}"
           git push
