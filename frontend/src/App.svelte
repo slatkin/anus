@@ -1,5 +1,5 @@
 <script>
-  import { onMount, tick } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { FetchEntries, RefreshAndFetch, FetchArticleContent, MarkRead, MarkUnread, ToggleStar, SaveEntry, OpenURL } from './api.js';
   import { BookOpen, Bookmark, ExternalLink, Mail, Minus, Plus, AlignLeft } from 'lucide-svelte';
@@ -46,6 +46,8 @@
   let page = 0;
   let totalPages = 1;
   let pageStride = 0;
+  let _measureTimer = null;
+  let _measureId = 0;
   let itemEls = [];
   let showRead   = localStorage.getItem('showRead')   !== 'false';
   let sortOldest = localStorage.getItem('sortOldest') === 'true';
@@ -100,21 +102,43 @@
     : cols === 1
       ? readerWidth
       : cols * COL_WIDTH + (cols - 1) * COL_GAP + 2 * COL_PAD;
+  // column-width drives the CSS multi-column layout instead of column-count.
+  // WebKit does not create horizontal overflow pages for column-count:1 but
+  // does for column-width, which is what enables pagination in single-col mode.
+  $: colWidth = Math.round((contentWidth - 2 * COL_PAD - (cols - 1) * COL_GAP) / cols);
+
+  function scheduleMeasure() {
+    clearTimeout(_measureTimer);
+    _measureTimer = setTimeout(measurePages, 50);
+  }
 
   async function measurePages() {
+    const id = ++_measureId;
     await tick();
-    if (!contentEl || !readerWidth) return;
-    const style    = getComputedStyle(contentEl);
-    const padL     = parseFloat(style.paddingLeft)  || 0;
-    const padR     = parseFloat(style.paddingRight) || 0;
-    const gap      = parseFloat(style.columnGap)    || 0;
-    const colWidth = cols === 1 ? readerWidth - padL - padR : COL_WIDTH;
-    pageStride     = cols * (colWidth + gap);
-    totalPages     = Math.max(1, Math.round((contentEl.scrollWidth - padL - padR + gap) / pageStride));
+    if (id !== _measureId || !contentEl || !readerWidth) return;
+    // Double-RAF: ensures browser has completed CSS multi-column reflow after DOM changes.
+    await new Promise(r => requestAnimationFrame(r));
+    await new Promise(r => requestAnimationFrame(r));
+    if (id !== _measureId || !contentEl || !readerWidth) return;
+
+    const style  = getComputedStyle(contentEl);
+    const padL   = parseFloat(style.paddingLeft)  || 0;
+    const padR   = parseFloat(style.paddingRight) || 0;
+    const gap    = parseFloat(style.columnGap)    || 0;
+    // pageStride = one page-width in the overflow direction, regardless of cols.
+    // Derivation: stride = cols*(colW+gap); colW = (clientW-padL-padR-(cols-1)*gap)/cols;
+    // so stride = clientW - padL - padR + gap.
+    pageStride   = contentEl.clientWidth - padL - padR + gap;
+    const raw    = (contentEl.scrollWidth - padL - padR + gap) / pageStride;
+    totalPages   = Math.max(1, Math.round(raw));
     if (page >= totalPages) page = Math.max(0, totalPages - 1);
   }
 
-  $: readerWidth && selectedEntry && (narrowMode, measurePages());
+  // Reset page immediately when column count changes (window resize crossed boundary).
+  $: { cols; page = 0; scheduleMeasure(); }
+
+  // Remeasure on any layout-relevant change.
+  $: if (selectedEntry) (readerWidth, narrowMode, fontSize, scheduleMeasure());
 
   $: filteredEntries = showRead
     ? entries
@@ -141,6 +165,10 @@
     const poll  = setInterval(() => fetchEntries(true), 10 * 60 * 1000);
     const clock = setInterval(() => { now = Date.now(); }, 60 * 1000);
     return () => { clearInterval(poll); clearInterval(clock); };
+  });
+
+  onDestroy(() => {
+    clearTimeout(_measureTimer);
   });
 
   // ── data ──────────────────────────────────────────────────────────
@@ -609,7 +637,7 @@
         <div class="reader-viewport" style="width: {contentWidth}px">
           <div class="reader-content"
                bind:this={contentEl}
-               style="width: {contentWidth}px; column-count: {cols}; height: 100%; transform: translateX(-{page * pageStride}px)">
+               style="width: {contentWidth}px; column-width: {colWidth}px; height: 100%; transform: translateX(-{page * pageStride}px)">
             <h1 class="article-title">{selectedEntry.title}</h1>
             <div class="article-meta">{selectedEntry.feed.title}  ·  {fullDate(selectedEntry.published_at)}{selectedEntry.fetched_at ? '  ·  Fetched ' + timeAgo(selectedEntry.fetched_at) : ''}</div>
             <div class="reader-controls">
@@ -657,24 +685,12 @@
 </div><!-- /app -->
 
 <style>
-  @font-face {
-    font-family: 'LexendDeca';
-    font-weight: 300;
-    src: url('/fonts/LexendDeca-Light.ttf') format('truetype');
-  }
-  @font-face {
-    font-family: 'LexendDeca';
-    font-weight: 700;
-    src: url('/fonts/LexendDeca-Bold.ttf') format('truetype');
-  }
-
-
   :global(*, *::before, *::after) { box-sizing: border-box; margin: 0; padding: 0; }
 
   :global(html, body) {
     height: 100%;
     overflow: hidden;
-    font-family: 'LexendDeca', system-ui, sans-serif;
+    font-family: 'Lexend Deca', system-ui, sans-serif;
     font-weight: 300;
   }
 
@@ -1004,7 +1020,7 @@
 
   .reader-content {
     height: 100%;
-    padding: 36px 48px 64px;
+    padding: 36px clamp(16px, 5%, 48px) 64px;
     column-gap: 3em;
     column-fill: auto;
     orphans: 3;
