@@ -478,12 +478,10 @@
       case 'PageDown':
       case 'ArrowRight': e.preventDefault();
         if (page < totalPages - 1) page++;
-        else if (cursor < displayEntries.length - 1) openArticle(cursor + 1);
         break;
       case 'PageUp':
       case 'ArrowLeft':  e.preventDefault();
         if (page > 0) page--;
-        else if (cursor > 0) openArticle(cursor - 1);
         break;
       case '?': setStatus('↑↓ navigate  enter open  space mark read+next  b/esc back  u read  s star  A all-read  f feeds  e save  o browser  x original  r refresh', 5000); break;
     }
