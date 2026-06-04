@@ -498,7 +498,7 @@
       const cleaned = attrs.replace(/\s+(width|height)=["'][^"']*["']/gi, '');
       return `<img${cleaned}>`;
     });
-    return html.replace(
+    html = html.replace(
       /<iframe[^>]*src=["']https?:\/\/(?:www\.)?youtube(?:-nocookie)?\.com\/embed\/([a-zA-Z0-9_-]+)[^"']*["'][^>]*>(?:<\/iframe>)?/gi,
       (_, id) =>
         `<div class="yt-thumb" data-yt-url="https://www.youtube.com/watch?v=${id}">` +
@@ -507,6 +507,19 @@
         `<span class="yt-play">▶ Watch on YouTube</span>` +
         `</div>`
     );
+    // Remove <p> elements inside <figure> that duplicate the <figcaption>.
+    // Some feeds include the caption as both a plain paragraph and a figcaption.
+    const doc = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html');
+    doc.querySelectorAll('figure').forEach(fig => {
+      const cap = fig.querySelector('figcaption');
+      if (!cap) return;
+      const capText = cap.textContent.trim().replace(/\s+/g, ' ').toLowerCase();
+      fig.querySelectorAll('p').forEach(p => {
+        const pText = p.textContent.trim().replace(/\s+/g, ' ').toLowerCase();
+        if (pText === capText || capText.includes(pText) || pText.includes(capText)) p.remove();
+      });
+    });
+    return doc.body.innerHTML;
   }
 
   $: activeCursor = mode === MODE_FEEDS ? feedCursor : cursor;
@@ -946,6 +959,7 @@
   }
   .nav-item.selected .nav-sub { color: #7a89b8; }
   .nav-item.open     .nav-sub { color: #6b7499; }
+  .nav-item.open     .nav-title { color: #73daca; }
 
   .bottom-pad-mask {
     position: absolute;
