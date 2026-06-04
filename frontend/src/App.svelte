@@ -2,7 +2,7 @@
   import { onMount, onDestroy, tick } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { FetchEntries, RefreshAndFetch, FetchArticleContent, MarkRead, MarkUnread, ToggleStar, SaveEntry, OpenURL } from './api.js';
-  import { BookOpen, Bookmark, ExternalLink, Mail, Minus, Plus, AlignLeft } from 'lucide-svelte';
+  import { BookOpen, Bookmark, ExternalLink, EyeOff, Minus, Plus } from 'lucide-svelte';
 
   const MODE_ENTRIES = 'entries';
   const MODE_FEEDS   = 'feeds';
@@ -61,12 +61,11 @@
   let navWidth     = parseInt(localStorage.getItem('navWidth') || '300', 10);
   let navCollapsed = localStorage.getItem('navCollapsed') === 'true';
   let fontSize     = parseInt(localStorage.getItem('readerFontSize') || '16', 10);
-  let narrowMode   = localStorage.getItem('narrowMode') === 'true';
+  let keptUnread = new Set();
 
   $: localStorage.setItem('navWidth',       String(navWidth));
   $: localStorage.setItem('navCollapsed',   String(navCollapsed));
   $: localStorage.setItem('readerFontSize', String(fontSize));
-  $: localStorage.setItem('narrowMode',     String(narrowMode));
 
   function toggleNav() {
     navCollapsed = !navCollapsed;
@@ -94,14 +93,12 @@
   const COL_PAD   = 48; // horizontal padding matches CSS: padding: 36px 48px
   const COL_GAP   = 48; // column-gap: 3em at 16px base font
 
-  $: cols = (narrowMode || readerWidth <= 0)
+  $: cols = readerWidth <= 0
     ? 1
     : Math.max(1, Math.floor((readerWidth - 2 * COL_PAD + COL_GAP) / (COL_WIDTH + COL_GAP)));
-  $: contentWidth = narrowMode
-    ? Math.min(readerWidth, COL_WIDTH + 2 * COL_PAD)
-    : cols === 1
-      ? readerWidth
-      : cols * COL_WIDTH + (cols - 1) * COL_GAP + 2 * COL_PAD;
+  $: contentWidth = cols === 1
+    ? readerWidth
+    : cols * COL_WIDTH + (cols - 1) * COL_GAP + 2 * COL_PAD;
   // column-width drives the CSS multi-column layout instead of column-count.
   // WebKit does not create horizontal overflow pages for column-count:1 but
   // does for column-width, which is what enables pagination in single-col mode.
@@ -138,7 +135,7 @@
   $: { cols; page = 0; scheduleMeasure(); }
 
   // Remeasure on any layout-relevant change.
-  $: if (selectedEntry) (readerWidth, narrowMode, fontSize, scheduleMeasure());
+  $: if (selectedEntry) (readerWidth, fontSize, scheduleMeasure());
 
   $: filteredEntries = showRead
     ? entries
@@ -308,12 +305,6 @@
   function openArticle(idx) {
     if (idx < 0 || idx >= displayEntries.length) return;
 
-    const prev = selectedEntry;
-    if (prev && prev.status === 'unread') {
-      mutateEntry(prev.id, e => ({ ...e, status: 'read' }));
-      MarkRead([prev.id]).catch(() => {});
-    }
-
     selectedIdx      = idx;
     cursor           = idx;
     focus            = FOCUS_READER;
@@ -324,6 +315,11 @@
     page = 0;
     scrollCursorIntoView();
     refreshStatus();
+
+    if (selectedEntry.status === 'unread' && !keptUnread.has(selectedEntry.id)) {
+      mutateEntry(selectedEntry.id, e => ({ ...e, status: 'read' }));
+      MarkRead([selectedEntry.id]).catch(() => {});
+    }
   }
 
   // ── actions ───────────────────────────────────────────────────────
@@ -333,8 +329,28 @@
     if (!entry) return;
     const newStatus = entry.status === 'read' ? 'unread' : 'read';
     mutateEntry(entry.id, e => ({ ...e, status: newStatus }));
-    if (newStatus === 'read') { MarkRead([entry.id]).catch(() => {}); advanceToNextUnread(); }
-    else MarkUnread([entry.id]).catch(() => {});
+    if (newStatus === 'read') {
+      MarkRead([entry.id]).catch(() => {});
+      keptUnread.delete(entry.id); keptUnread = keptUnread;
+      advanceToNextUnread();
+    } else {
+      MarkUnread([entry.id]).catch(() => {});
+      keptUnread.add(entry.id); keptUnread = keptUnread;
+    }
+  }
+
+  function handleMailClick() {
+    if (!selectedEntry) return;
+    if (selectedEntry.status === 'unread') {
+      if (keptUnread.has(selectedEntry.id)) keptUnread.delete(selectedEntry.id);
+      else keptUnread.add(selectedEntry.id);
+      keptUnread = keptUnread;
+    } else {
+      keptUnread.add(selectedEntry.id);
+      keptUnread = keptUnread;
+      mutateEntry(selectedEntry.id, e => ({ ...e, status: 'unread' }));
+      MarkUnread([selectedEntry.id]).catch(() => {});
+    }
   }
 
   function toggleStar() {
@@ -346,7 +362,7 @@
   }
 
   function markAllRead() {
-    const ids = entries.filter(e => e.status === 'unread').map(e => e.id);
+    const ids = entries.filter(e => e.status === 'unread' && !keptUnread.has(e.id)).map(e => e.id);
     if (!ids.length) return;
     const idSet = new Set(ids);
     entries    = entries.map(e => idSet.has(e.id) ? { ...e, status: 'read' } : e);
@@ -356,7 +372,7 @@
   }
 
   function markFeedRead(feedId) {
-    const ids = entries.filter(e => e.feed_id === feedId && e.status === 'unread').map(e => e.id);
+    const ids = entries.filter(e => e.feed_id === feedId && e.status === 'unread' && !keptUnread.has(e.id)).map(e => e.id);
     if (!ids.length) return;
     const idSet = new Set(ids);
     entries    = entries.map(e => idSet.has(e.id) ? { ...e, status: 'read' } : e);
@@ -507,17 +523,27 @@
         `<span class="yt-play">▶ Watch on YouTube</span>` +
         `</div>`
     );
-    // Remove <p> elements inside <figure> that duplicate the <figcaption>.
-    // Some feeds include the caption as both a plain paragraph and a figcaption.
+    // Remove paragraphs that duplicate a nearby <figcaption>.
+    // Feeds commonly include the caption as both a plain <p> and a <figcaption>,
+    // either inside the <figure> or as an adjacent sibling.
     const doc = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html');
+    const norm = t => t.trim().replace(/\s+/g, ' ').toLowerCase();
     doc.querySelectorAll('figure').forEach(fig => {
       const cap = fig.querySelector('figcaption');
       if (!cap) return;
-      const capText = cap.textContent.trim().replace(/\s+/g, ' ').toLowerCase();
+      const capText = norm(cap.textContent);
+      // Remove matching <p> elements inside the figure
       fig.querySelectorAll('p').forEach(p => {
-        const pText = p.textContent.trim().replace(/\s+/g, ' ').toLowerCase();
-        if (pText === capText || capText.includes(pText) || pText.includes(capText)) p.remove();
+        const t = norm(p.textContent);
+        if (t === capText || capText.includes(t) || t.includes(capText)) p.remove();
       });
+      // Remove matching <p> siblings immediately before or after the figure
+      for (const sibling of [fig.previousElementSibling, fig.nextElementSibling]) {
+        if (sibling?.tagName === 'P') {
+          const t = norm(sibling.textContent);
+          if (t === capText || capText.includes(t) || t.includes(capText)) sibling.remove();
+        }
+      }
     });
     return doc.body.innerHTML;
   }
@@ -664,9 +690,12 @@
               <span class="ctrl-label">A</span>
               <button class="ctrl-btn" on:click={increaseFontSize} title="Increase font size"><Plus size={13}/></button>
               <div class="ctrl-sep"></div>
-              <button class="ctrl-btn" class:active={narrowMode} on:click={() => { narrowMode = !narrowMode; }} title="Narrow reading width"><AlignLeft size={14}/></button>
-              <div class="ctrl-sep"></div>
-              <button class="ctrl-btn" on:click={() => { if (selectedEntry?.status === 'read') toggleRead(); }} title="Mark as unread"><Mail size={14}/></button>
+              <button class="ctrl-btn"
+                      class:active={keptUnread.has(selectedEntry?.id)}
+                      on:click={handleMailClick}
+                      title={selectedEntry?.status === 'unread' ? 'Keep unread' : 'Mark as unread'}>
+                <EyeOff size={14}/>
+              </button>
               <button class="ctrl-btn" on:click={saveEntry} title="Save to Miniflux"><Bookmark size={14}/></button>
               <button class="ctrl-btn" on:click={openBrowser} title="Open in browser"><ExternalLink size={14}/></button>
             </div>
