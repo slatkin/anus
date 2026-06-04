@@ -1,0 +1,23 @@
+# Maintainer: slatkin <slatkin@gmail.com>
+pkgname=anus-ui
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Miniflux desktop reader'
+arch=('x86_64')
+url='https://github.com/slatkin/anus'
+license=('custom')
+depends=('webkit2gtk-4.1')
+source=("$pkgname-$pkgver-linux-x86_64.tar.gz::https://github.com/slatkin/anus/releases/download/v${pkgver}/${pkgname}-${pkgver}-linux-x86_64.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+  cd "$pkgname-$pkgver"
+
+  install -Dm755 "anus" "$pkgdir/usr/bin/anus"
+  install -Dm644 "anus-ui.desktop" "$pkgdir/usr/share/applications/anus-ui.desktop"
+
+  for sz in 16 32 48 64 128 256; do
+    install -Dm644 "icons/${sz}x${sz}/anus.png" \
+      "$pkgdir/usr/share/icons/hicolor/${sz}x${sz}/apps/anus.png"
+  done
+}

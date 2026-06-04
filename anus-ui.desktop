@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=anus
+Comment=Miniflux desktop reader
+Exec=anus
+Icon=anus
+Categories=Network;News;
+StartupNotify=true
