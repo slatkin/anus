@@ -2,23 +2,15 @@
 
 **A newsreader, unfussy & simple.**
 
-A [Miniflux](https://miniflux.app/) reader available as both a native Linux desktop app and a self-hosted web service. Built with Go, Svelte, and [Wails v2](https://wails.io/).
+anus is a [Miniflux](https://miniflux.app/) reader available as both a native Linux desktop app and a self-hosted web service. Built with Go, Svelte, and [Wails v2](https://wails.io/).
 
-## Variants
+anus can be used two ways: as a local client or as a web service running in a docker container:
 
 | | `anus-ui` | `anus-web` |
 |---|---|---|
 | **What** | Native desktop app (WebKit2GTK) | Containerised web service |
 | **Install** | AUR (`anus`) or build from source | Docker / `docker compose` |
 | **Config** | `~/.config/anus/config.toml` | Environment variables |
-
-## Features
-
-- Reads unread articles and recent read articles (last 30 days) from your Miniflux server
-- Multi-column paginated reader that adapts to window width (~560px per column)
-- Rosé Pine Moon sidebar, sepia reader pane, LexendDeca font
-- Local BoltDB article cache with configurable expiry; falls back to cache when offline
-- Auto-polls Miniflux every 10 minutes for new articles
 
 ---
 

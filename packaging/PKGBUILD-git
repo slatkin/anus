@@ -5,7 +5,7 @@ pkgrel=1
 pkgdesc='Miniflux desktop reader (git)'
 arch=('x86_64')
 url='https://github.com/slatkin/anus'
-license=('custom')
+license=('MIT')
 depends=('webkit2gtk-4.1')
 makedepends=('go' 'npm' 'imagemagick' 'git')
 provides=('anus')
@@ -43,6 +43,7 @@ build() {
 package() {
   cd "$pkgname"
 
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm755 anus "$pkgdir/usr/bin/anus"
   install -Dm644 anus.desktop "$pkgdir/usr/share/applications/anus.desktop"
 
