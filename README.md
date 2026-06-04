@@ -32,8 +32,28 @@ docker run -d \
 
 Or with `docker compose`:
 
+```yaml
+services:
+  anus-web:
+    image: ghcr.io/slatkin/anus-web:latest
+    ports:
+      - "8080:8080"
+    environment:
+      MINIFLUX_URL: "https://your-miniflux-instance"
+      MINIFLUX_API_KEY: "your-api-key"
+      CACHE_DIR: /data/cache
+      # ALLOW_INVALID_CERTS: "false"
+      # CACHE_EXPIRY_DAYS: "30"
+      # REMEMBER_READ_POSITION: "true"
+      # PORT: "8080"
+    volumes:
+      - anus-cache:/data/cache
+
+volumes:
+  anus-cache:
+```
+
 ```bash
-# edit docker-compose.yml to set MINIFLUX_URL and MINIFLUX_API_KEY
 docker compose up -d
 ```
 
