@@ -524,13 +524,20 @@
         `<span class="yt-play">▶ Watch on YouTube</span>` +
         `</div>`
     );
-    // Ars Technica (and similar feeds) put the caption as both a raw text node
-    // directly inside <figure> AND inside <figcaption>. Strip the text nodes.
+    // Ars Technica duplicates caption content as direct children of <figure>
+    // (both text nodes and elements like <a>) before the <figcaption>.
+    // Remove everything between the image/wrapper and the <figcaption>.
     const doc = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html');
     doc.querySelectorAll('figure').forEach(fig => {
-      if (!fig.querySelector('figcaption')) return;
-      for (const node of [...fig.childNodes])
-        if (node.nodeType === 3 && node.textContent.trim()) node.remove();
+      const cap = fig.querySelector(':scope > figcaption');
+      if (!cap) return;
+      for (const node of [...fig.childNodes]) {
+        if (node === cap) break;
+        const isImg = node.nodeType === 1 &&
+          (node.tagName === 'IMG' || node.tagName === 'PICTURE' || node.tagName === 'VIDEO' ||
+           (node.tagName === 'A' && node.querySelector('img, picture, video')));
+        if (!isImg) node.remove();
+      }
     });
     return doc.body.innerHTML;
   }
