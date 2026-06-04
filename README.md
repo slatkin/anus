@@ -1,6 +1,6 @@
 # anus
 
-**A Newsreader, Unfussy & Simple.**
+**A newsreader, unfussy & simple.**
 
 A [Miniflux](https://miniflux.app/) reader available as both a native Linux desktop app and a self-hosted web service. Built with Go, Svelte, and [Wails v2](https://wails.io/).
 
