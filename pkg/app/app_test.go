@@ -66,6 +66,8 @@ func (m *mockClient) SaveEntry(id int) error {
 	return nil
 }
 
+func (m *mockClient) RefreshAllFeeds() error { return nil }
+
 // ── helpers ───────────────────────────────────────────────────────────────
 
 func entry(id int, status miniflux.ReadStatus) miniflux.FeedEntry {

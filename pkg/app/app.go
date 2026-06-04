@@ -1,10 +1,13 @@
 package app
 
 import (
+	"bytes"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
+	readability "codeberg.org/readeck/go-readability/v2"
 	"github.com/slatkin/anus/internal/cache"
 	"github.com/slatkin/anus/pkg/miniflux"
 )
@@ -17,6 +20,7 @@ type MinifluxClient interface {
 	ChangeEntryReadStatus(ids []int, status miniflux.ReadStatus) error
 	ToggleStarred(id int) error
 	SaveEntry(id int) error
+	RefreshAllFeeds() error
 }
 
 type App struct {
@@ -24,6 +28,8 @@ type App struct {
 	cache                *cache.Cache
 	cacheExpiryDays      int
 	rememberReadPosition bool
+	articleCache         map[int]string
+	mu                   sync.Mutex
 }
 
 // New creates an App. Call Open before use and Close when done.
@@ -32,6 +38,7 @@ func New(client MinifluxClient, cacheExpiryDays int, rememberReadPosition bool) 
 		client:               client,
 		cacheExpiryDays:      cacheExpiryDays,
 		rememberReadPosition: rememberReadPosition,
+		articleCache:         make(map[int]string),
 	}
 }
 
@@ -143,6 +150,35 @@ func (a *App) FetchEntries() (*FetchResult, error) {
 
 	sortByDate(merged)
 	return &FetchResult{Entries: merged, Feeds: buildFeedList(merged), RememberReadPosition: a.rememberReadPosition}, nil
+}
+
+func (a *App) RefreshAndFetch() (*FetchResult, error) {
+	_ = a.client.RefreshAllFeeds()
+	return a.FetchEntries()
+}
+
+func (a *App) FetchArticleContent(id int, url string) (string, error) {
+	a.mu.Lock()
+	if html, ok := a.articleCache[id]; ok {
+		a.mu.Unlock()
+		return html, nil
+	}
+	a.mu.Unlock()
+
+	article, err := readability.FromURL(url, 30*time.Second)
+	if err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	if err := article.RenderHTML(&buf); err != nil {
+		return "", err
+	}
+	html := buf.String()
+
+	a.mu.Lock()
+	a.articleCache[id] = html
+	a.mu.Unlock()
+	return html, nil
 }
 
 func (a *App) MarkRead(ids []int) error {

@@ -1,7 +1,8 @@
 <script>
   import { onMount, tick } from 'svelte';
   import { fade, fly } from 'svelte/transition';
-  import { FetchEntries, MarkRead, MarkUnread, ToggleStar, SaveEntry, OpenURL } from './api.js';
+  import { FetchEntries, RefreshAndFetch, FetchArticleContent, MarkRead, MarkUnread, ToggleStar, SaveEntry, OpenURL } from './api.js';
+  import { BookOpen, Bookmark, ExternalLink, Mail, Minus, Plus, AlignLeft } from 'lucide-svelte';
 
   const MODE_ENTRIES = 'entries';
   const MODE_FEEDS   = 'feeds';
@@ -19,8 +20,10 @@
   let cursor      = 0;
   let feedCursor  = 0;
   let filterFeedID = 0;
-  let selectedEntry = null;
-  let selectedIdx   = -1;
+  let selectedEntry    = null;
+  let selectedIdx      = -1;
+  let originalContent  = null;
+  let fetchingOriginal = false;
 
   let statusText    = 'Loading…';
   let statusTimeout = null;
@@ -55,13 +58,20 @@
   $: localStorage.setItem('collapsedFeeds', JSON.stringify([...collapsedFeeds]));
   let navWidth     = parseInt(localStorage.getItem('navWidth') || '300', 10);
   let navCollapsed = localStorage.getItem('navCollapsed') === 'true';
+  let fontSize     = parseInt(localStorage.getItem('readerFontSize') || '16', 10);
+  let narrowMode   = localStorage.getItem('narrowMode') === 'true';
 
-  $: localStorage.setItem('navWidth',     String(navWidth));
-  $: localStorage.setItem('navCollapsed', String(navCollapsed));
+  $: localStorage.setItem('navWidth',       String(navWidth));
+  $: localStorage.setItem('navCollapsed',   String(navCollapsed));
+  $: localStorage.setItem('readerFontSize', String(fontSize));
+  $: localStorage.setItem('narrowMode',     String(narrowMode));
 
   function toggleNav() {
     navCollapsed = !navCollapsed;
   }
+
+  function increaseFontSize() { fontSize = Math.min(fontSize + 2, 28); }
+  function decreaseFontSize() { fontSize = Math.max(fontSize - 2, 10); }
 
   function startNavResize(e) {
     e.preventDefault();
@@ -82,12 +92,14 @@
   const COL_PAD   = 48; // horizontal padding matches CSS: padding: 36px 48px
   const COL_GAP   = 48; // column-gap: 3em at 16px base font
 
-  $: cols = readerWidth > 0
-    ? Math.max(1, Math.floor((readerWidth - 2 * COL_PAD + COL_GAP) / (COL_WIDTH + COL_GAP)))
-    : 1;
-  $: contentWidth = cols === 1
-    ? readerWidth
-    : cols * COL_WIDTH + (cols - 1) * COL_GAP + 2 * COL_PAD;
+  $: cols = (narrowMode || readerWidth <= 0)
+    ? 1
+    : Math.max(1, Math.floor((readerWidth - 2 * COL_PAD + COL_GAP) / (COL_WIDTH + COL_GAP)));
+  $: contentWidth = narrowMode
+    ? Math.min(readerWidth, COL_WIDTH + 2 * COL_PAD)
+    : cols === 1
+      ? readerWidth
+      : cols * COL_WIDTH + (cols - 1) * COL_GAP + 2 * COL_PAD;
 
   async function measurePages() {
     await tick();
@@ -102,7 +114,7 @@
     if (page >= totalPages) page = Math.max(0, totalPages - 1);
   }
 
-  $: readerWidth && selectedEntry && measurePages();
+  $: readerWidth && selectedEntry && (narrowMode, measurePages());
 
   $: filteredEntries = showRead
     ? entries
@@ -133,14 +145,14 @@
 
   // ── data ──────────────────────────────────────────────────────────
 
-  async function fetchEntries(background = false) {
+  async function fetchEntries(background = false, doServerRefresh = false) {
     const prevIds    = new Set(allEntries.map(e => e.id));
     const isInitial  = prevIds.size === 0;
     if (!background) { loading = true; statusText = 'Loading…'; }
-    if (!isInitial) showToast('Refreshing…', 0);
+    if (!isInitial) showToast(doServerRefresh ? 'Polling feeds…' : 'Refreshing…', 0);
     error = null;
     try {
-      const result = await FetchEntries();
+      const result = doServerRefresh ? await RefreshAndFetch() : await FetchEntries();
       allEntries = result.entries ?? [];
       feeds      = result.feeds   ?? [];
       entries    = filterByFeed(allEntries, filterFeedID);
@@ -274,10 +286,12 @@
       MarkRead([prev.id]).catch(() => {});
     }
 
-    selectedIdx   = idx;
-    cursor        = idx;
-    focus         = FOCUS_READER;
-    selectedEntry = displayEntries[idx];
+    selectedIdx      = idx;
+    cursor           = idx;
+    focus            = FOCUS_READER;
+    selectedEntry    = displayEntries[idx];
+    originalContent  = null;
+    fetchingOriginal = false;
     localStorage.setItem('lastArticleId', String(selectedEntry.id));
     page = 0;
     scrollCursorIntoView();
@@ -338,6 +352,22 @@
     if (url) OpenURL(url);
   }
 
+  async function fetchOriginal() {
+    if (!selectedEntry) return;
+    if (originalContent !== null) { originalContent = null; return; }
+    if (fetchingOriginal) return;
+    fetchingOriginal = true;
+    showToast('Fetching original…', 0);
+    try {
+      originalContent = await FetchArticleContent(selectedEntry.id, selectedEntry.url);
+      toastVisible = false;
+    } catch (e) {
+      showToast('Failed to fetch original', 3000);
+    } finally {
+      fetchingOriginal = false;
+    }
+  }
+
   function handleArticleClick(e) {
     const yt = e.target.closest('[data-yt-url]');
     if (yt) { e.preventDefault(); OpenURL(yt.dataset.ytUrl); return; }
@@ -373,7 +403,7 @@
     const n   = (mode === MODE_FEEDS ? feeds : displayEntries).length;
     const cur = (mode === MODE_FEEDS ? feedCursor : cursor) + 1;
     if (focus === FOCUS_READER) {
-      statusText = `[${selectedIdx + 1}/${displayEntries.length}]  ↑↓ prev/next  space mark read  b back  u read  s star  e save  o open`;
+      statusText = `[${selectedIdx + 1}/${displayEntries.length}]  ↑↓ prev/next  space mark read  b back  u read  s star  e save  o open  x original`;
     } else if (mode === MODE_FEEDS) {
       statusText = `${cur}/${n}  enter open  r refresh`;
     } else {
@@ -396,7 +426,8 @@
       case 'A': markAllRead(); break;
       case 'e': saveEntry(); break;
       case 'o': openBrowser(); break;
-      case 'r': fetchEntries(); break;
+      case 'x': fetchOriginal(); break;
+      case 'r': fetchEntries(false, true); break;
       case ' ':        e.preventDefault(); markReadAndAdvance(); break;
       case 'PageDown':
       case 'ArrowRight': e.preventDefault();
@@ -408,7 +439,7 @@
         if (page > 0) page--;
         else if (cursor > 0) openArticle(cursor - 1);
         break;
-      case '?': setStatus('↑↓ navigate  enter open  space mark read+next  b/esc back  u read  s star  A all-read  f feeds  e save  o browser  r refresh', 5000); break;
+      case '?': setStatus('↑↓ navigate  enter open  space mark read+next  b/esc back  u read  s star  A all-read  f feeds  e save  o browser  x original  r refresh', 5000); break;
     }
   }
 
@@ -534,7 +565,7 @@
           <button class="pill" class:active={showRead}   on:click={() => showRead   = !showRead}   title="Show or hide read articles">read</button>
           <button class="pill" class:active={sortOldest} on:click={() => sortOldest = !sortOldest} title="Sort oldest first">oldest</button>
         </div>
-        <button class="toolbar-btn" on:click={fetchEntries} title="Refresh (r)">↺</button>
+        <button class="toolbar-btn" on:click={() => fetchEntries(false, true)} title="Refresh (r)">↺</button>
       </div>
 
       <div class="nav-pane nav-collapsible">
@@ -581,8 +612,25 @@
                style="width: {contentWidth}px; column-count: {cols}; height: 100%; transform: translateX(-{page * pageStride}px)">
             <h1 class="article-title">{selectedEntry.title}</h1>
             <div class="article-meta">{selectedEntry.feed.title}  ·  {fullDate(selectedEntry.published_at)}{selectedEntry.fetched_at ? '  ·  Fetched ' + timeAgo(selectedEntry.fetched_at) : ''}</div>
-            <div class="article-body" on:click={handleArticleClick} on:error|capture={handleArticleImgError}>
-              {@html processContent(selectedEntry.content)}
+            <div class="reader-controls">
+              <label class="readability-toggle" title="Readability mode">
+                <input type="checkbox" checked={originalContent !== null} on:change={fetchOriginal}>
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                <BookOpen size={14}/>
+              </label>
+              <div class="ctrl-sep"></div>
+              <button class="ctrl-btn" on:click={decreaseFontSize} title="Decrease font size"><Minus size={13}/></button>
+              <span class="ctrl-label">A</span>
+              <button class="ctrl-btn" on:click={increaseFontSize} title="Increase font size"><Plus size={13}/></button>
+              <div class="ctrl-sep"></div>
+              <button class="ctrl-btn" class:active={narrowMode} on:click={() => { narrowMode = !narrowMode; }} title="Narrow reading width"><AlignLeft size={14}/></button>
+              <div class="ctrl-sep"></div>
+              <button class="ctrl-btn" on:click={() => { if (selectedEntry?.status === 'read') toggleRead(); }} title="Mark as unread"><Mail size={14}/></button>
+              <button class="ctrl-btn" on:click={saveEntry} title="Save to Miniflux"><Bookmark size={14}/></button>
+              <button class="ctrl-btn" on:click={openBrowser} title="Open in browser"><ExternalLink size={14}/></button>
+            </div>
+            <div class="article-body" style="font-size: {fontSize}px" on:click={handleArticleClick} on:error|capture={handleArticleImgError}>
+              {@html processContent(originalContent ?? selectedEntry.content)}
             </div>
           </div>
         </div>
@@ -983,18 +1031,74 @@
     font-weight: 700;
     line-height: 1.3;
     color: #3a2c1a;
-    margin-bottom: 10px;
+    margin-bottom: 2px;
   }
 
   .article-meta {
     font-size: 12px;
     color: #9a7a58;
-    margin-bottom: 24px;
+    margin-bottom: 0;
   }
+  .reader-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    margin-bottom: 20px;
+    border-top: 1px dotted #c4a882;
+    margin-top: 10px;
+  }
+  .ctrl-sep { width: 1px; height: 14px; background: #c4a882; margin: 0 2px; }
+  .ctrl-label { font-size: 13px; color: #9a7a58; font-weight: 600; line-height: 1; }
+  .ctrl-btn {
+    background: none;
+    border: none;
+    padding: 3px 4px;
+    color: #9a7a58;
+    cursor: pointer;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+  }
+  .ctrl-btn:hover { background: #2a1f14; color: #c4a882; }
+  .ctrl-btn.active { color: #7aa2f7; }
+  .readability-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    color: #9a7a58;
+    padding: 3px 4px;
+    border-radius: 3px;
+  }
+  .readability-toggle:hover { background: #2a1f14; color: #c4a882; }
+  .readability-toggle input:checked ~ * { color: #7aa2f7; }
+  .readability-toggle input { display: none; }
+  .toggle-track {
+    width: 28px;
+    height: 16px;
+    background: #3a3a3a;
+    border-radius: 8px;
+    position: relative;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .readability-toggle input:checked ~ .toggle-track { background: #7aa2f7; }
+  .toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    background: #ccc;
+    border-radius: 50%;
+    transition: left 0.2s;
+  }
+  .readability-toggle input:checked ~ .toggle-track .toggle-thumb { left: 14px; background: #fff; }
 
   /* ── article body (global: rendered HTML) ── */
   .article-body :global(p) {
-    font-size: 16px;
+    font-size: inherit;
     line-height: 1.75;
     margin-bottom: 1.1em;
   }

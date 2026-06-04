@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/slatkin/anus/internal/cache"
 	"github.com/slatkin/anus/pkg/app"
@@ -112,6 +113,31 @@ func registerAPI(mux *http.ServeMux, a *app.App) {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("POST /api/refresh-and-fetch", func(w http.ResponseWriter, r *http.Request) {
+		result, err := a.RefreshAndFetch()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		writeJSON(w, result)
+	})
+
+	mux.HandleFunc("GET /api/fetch-content", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.URL.Query().Get("id")
+		url := r.URL.Query().Get("url")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		html, err := a.FetchArticleContent(id, url)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		writeJSON(w, map[string]string{"content": html})
 	})
 }
 
