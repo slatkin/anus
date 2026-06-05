@@ -40,6 +40,7 @@ jobs:
           mkdir -p "${DIST}/icons"
           cp anus "${DIST}/"
           cp anus.desktop "${DIST}/"
+          cp LICENSE "${DIST}/"
           for sz in 16 32 48 64 128 256; do
             mkdir -p "${DIST}/icons/${sz}x${sz}"
             magick assets/appicon.png -resize "${sz}x${sz}" "${DIST}/icons/${sz}x${sz}/anus.png"
