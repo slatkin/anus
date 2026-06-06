@@ -147,9 +147,14 @@
     ? entries
     : entries.filter(e => e.status === 'unread' || e.id === selectedEntry?.id);
 
+  function entryOrder(a, b) {
+    const pub = new Date(b.published_at || 0) - new Date(a.published_at || 0);
+    if (pub !== 0) return pub;
+    return new Date(b.fetched_at || 0) - new Date(a.fetched_at || 0);
+  }
   $: displayEntries = sortOldest
-    ? [...filteredEntries].sort((a, b) => new Date(a.fetched_at || 0) - new Date(b.fetched_at || 0))
-    : [...filteredEntries].sort((a, b) => new Date(b.fetched_at || 0) - new Date(a.fetched_at || 0));
+    ? [...filteredEntries].sort((a, b) => -entryOrder(a, b))
+    : [...filteredEntries].sort(entryOrder);
 
   // Clamp cursor when displayEntries shrinks (e.g. toggle flipped).
   $: if (mode === MODE_ENTRIES && !loading && cursor >= displayEntries.length) {
