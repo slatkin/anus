@@ -665,10 +665,9 @@
       </div>
       <div class="toolbar toolbar-filters nav-collapsible">
         <div class="toolbar-toggles">
-          <span class="toolbar-label">View:</span>
-          <button class="pill" class:active={grouped}    on:click={() => grouped    = !grouped}    title="Group by feed">feeds</button>
-          <button class="pill" class:active={showRead}   on:click={() => showRead   = !showRead}   title="Show or hide read articles">read</button>
-          <button class="pill" class:active={sortOldest} on:click={() => sortOldest = !sortOldest} title="Sort oldest first">oldest</button>
+          <button class="pill" class:active={grouped}    on:click={() => grouped    = !grouped}    title="Group by feed">show feeds</button>
+          <button class="pill" class:active={showRead}   on:click={() => showRead   = !showRead}   title="Show or hide read articles">show read</button>
+          <button class="pill" class:active={sortOldest} on:click={() => sortOldest = !sortOldest} title="Sort oldest first">oldest first</button>
         </div>
         <button class="toolbar-btn" on:click={() => fetchEntries(false, true)} title="Refresh (r)">↺</button>
       </div>
@@ -800,15 +799,6 @@
     display: flex;
     align-items: center;
     gap: 2px;
-  }
-
-  .toolbar-label {
-    font-size: 11px;
-    font-variant: small-caps;
-    font-weight: 300;
-    color: #565f89;
-    letter-spacing: 0.02em;
-    padding-right: 2px;
   }
 
   .pill {
