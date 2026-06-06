@@ -588,6 +588,55 @@
       next.remove();  // removes entire text node (incl. any orphan gallery captions within)
     });
 
+    // Some feeds (e.g. plain-HTML sites) use <br> instead of <p> tags, which
+    // produces very tight line spacing because our CSS only styles <p>. Walk
+    // block-level containers and wrap inline segments (separated by <br>) into
+    // <p> tags, while leaving existing block children in place.
+    const IS_BLOCK = new Set(['P','DIV','H1','H2','H3','H4','H5','H6',
+      'UL','OL','LI','TABLE','BLOCKQUOTE','FIGURE','FIGCAPTION','PRE',
+      'SECTION','ARTICLE','HEADER','FOOTER','ASIDE','NAV']);
+    doc.querySelectorAll('body, div, section, article').forEach(block => {
+      // Only process blocks that have at least one direct <br> child.
+      if (![...block.children].some(c => c.tagName === 'BR')) return;
+      // Walk children: collect inline runs between <br> or block elements.
+      const children = [...block.childNodes];
+      const segments = []; // [{type:'inline'|'block', nodes:[]}]
+      let run = [];
+      for (const n of children) {
+        const isBlock = n.nodeType === 1 && IS_BLOCK.has(n.tagName);
+        const isBr    = n.nodeType === 1 && n.tagName === 'BR';
+        if (isBr) {
+          segments.push({type: 'inline', nodes: run}); run = [];
+        } else if (isBlock) {
+          if (run.length) { segments.push({type: 'inline', nodes: run}); run = []; }
+          segments.push({type: 'block', nodes: [n]});
+        } else {
+          run.push(n);
+        }
+      }
+      if (run.length) segments.push({type: 'inline', nodes: run});
+      // Only rewrite if at least one inline segment has visible content.
+      const hasInline = segments.some(s => s.type === 'inline' && s.nodes.some(n =>
+        n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim())
+      ));
+      if (!hasInline) return;
+      block.innerHTML = '';
+      for (const seg of segments) {
+        if (seg.type === 'block') {
+          block.appendChild(seg.nodes[0]);
+        } else {
+          const hasContent = seg.nodes.some(n =>
+            n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim())
+          );
+          if (hasContent) {
+            const p = doc.createElement('p');
+            seg.nodes.forEach(n => p.appendChild(n));
+            block.appendChild(p);
+          }
+        }
+      }
+    });
+
     return doc.body.innerHTML;
   }
 

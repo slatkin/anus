@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -70,6 +71,19 @@ func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error
 	return respBytes, nil
 }
 
+// fixProxyURLs rewrites image proxy URLs that Miniflux generates with
+// "http://localhost" when its BASE_URL env var is not configured. We replace
+// the localhost origin with the actual server URL so images load correctly.
+func (c *Client) fixProxyURLs(entries []FeedEntry) {
+	for i := range entries {
+		entries[i].Content = strings.ReplaceAll(
+			entries[i].Content,
+			"http://localhost/proxy/",
+			c.baseURL+"/proxy/",
+		)
+	}
+}
+
 func (c *Client) GetUnreadEntries(limit, offset int) ([]FeedEntry, int, error) {
 	path := fmt.Sprintf("/v1/entries?status=unread&order=published_at&direction=desc&limit=%d&offset=%d", limit, offset)
 	resp, err := c.doRequest("GET", path, nil)
@@ -81,6 +95,7 @@ func (c *Client) GetUnreadEntries(limit, offset int) ([]FeedEntry, int, error) {
 	if err := json.Unmarshal(resp, &result); err != nil {
 		return nil, 0, err
 	}
+	c.fixProxyURLs(result.Entries)
 	return result.Entries, result.Total, nil
 }
 
@@ -95,6 +110,7 @@ func (c *Client) GetReadEntries(since time.Time, limit, offset int) ([]FeedEntry
 	if err := json.Unmarshal(resp, &result); err != nil {
 		return nil, 0, err
 	}
+	c.fixProxyURLs(result.Entries)
 	return result.Entries, result.Total, nil
 }
 
@@ -109,6 +125,7 @@ func (c *Client) GetStarredEntries(limit, offset int) ([]FeedEntry, int, error) 
 	if err := json.Unmarshal(resp, &result); err != nil {
 		return nil, 0, err
 	}
+	c.fixProxyURLs(result.Entries)
 	return result.Entries, result.Total, nil
 }
 
