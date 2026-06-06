@@ -3,7 +3,7 @@
   import { fade, fly } from 'svelte/transition';
   import { FetchEntries, RefreshAndFetch, FetchArticleContent, MarkRead, MarkUnread, ToggleStar, SaveEntry, OpenURL } from './api.js';
   import { BookOpen, Bookmark, ExternalLink, EyeOff, Minus, Plus } from 'lucide-svelte';
-  import { COL_PAD, COL_GAP, calcCols, calcColWidth, calcContentWidth, calcPageStride, calcTotalPages } from './paging.js';
+  import { COL_PAD, COL_GAP, COL_PAD_TOP, COL_PAD_BOT, calcCols, calcColWidth, calcContentWidth, calcPageStride, calcTotalPages } from './paging.js';
 
   const MODE_ENTRIES = 'entries';
   const MODE_FEEDS   = 'feeds';
@@ -713,7 +713,7 @@
         <div class="reader-viewport" style="width: {contentWidth}px">
           <div class="reader-content"
                bind:this={contentEl}
-               style="width: {contentWidth}px; column-width: {colWidth}px; column-gap: {COL_GAP}px; padding: 36px {COL_PAD}px 64px; height: 100%; transform: translateX(-{page * pageStride}px)">
+               style="width: {contentWidth}px; column-width: {colWidth}px; column-gap: {COL_GAP}px; padding: {COL_PAD_TOP}px {COL_PAD}px {COL_PAD_BOT}px; height: 100%; transform: translateX(-{page * pageStride}px)">
             <h1 class="article-title">{selectedEntry.title}</h1>
             <div class="article-meta">{selectedEntry.feed.title}  ·  {fullDate(selectedEntry.published_at)}{selectedEntry.fetched_at ? '  ·  Fetched ' + timeAgo(selectedEntry.fetched_at) : ''}</div>
             <div class="reader-controls">

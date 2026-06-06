@@ -34,8 +34,10 @@ describe('calcCols', () => {
 });
 
 describe('calcColWidth', () => {
-  it('returns COL_MIN for zero or negative width', () => {
+  it('returns COL_MIN when readerWidth is too narrow to hold padding', () => {
     expect(calcColWidth(0, 1)).toBe(COL_MIN);
+    expect(calcColWidth(2 * COL_PAD, 1)).toBe(COL_MIN); // exactly at guard boundary
+    expect(calcColWidth(2 * COL_PAD + 1, 1)).toBeGreaterThan(0); // just past boundary → positive
   });
 
   it('single column fills available space up to COL_MAX', () => {
