@@ -6,6 +6,9 @@ const apiMode = process.env.VITE_API ?? 'web'
 
 export default defineConfig({
   plugins: [svelte()],
+  test: {
+    environment: 'node',
+  },
   build: {
     outDir: 'dist',
   },

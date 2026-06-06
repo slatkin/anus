@@ -3,6 +3,7 @@
   import { fade, fly } from 'svelte/transition';
   import { FetchEntries, RefreshAndFetch, FetchArticleContent, MarkRead, MarkUnread, ToggleStar, SaveEntry, OpenURL } from './api.js';
   import { BookOpen, Bookmark, ExternalLink, EyeOff, Minus, Plus } from 'lucide-svelte';
+  import { COL_PAD, COL_GAP, calcCols, calcColWidth, calcContentWidth, calcPageStride, calcTotalPages } from './paging.js';
 
   const MODE_ENTRIES = 'entries';
   const MODE_FEEDS   = 'feeds';
@@ -90,53 +91,57 @@
     window.addEventListener('mouseup', onUp);
   }
 
-  const COL_WIDTH = 560;
-  const COL_PAD   = 48; // horizontal padding matches CSS: padding: 36px 48px
-  const COL_GAP   = 48; // column-gap: 3em at 16px base font
-
-  $: cols = readerWidth <= 0
-    ? 1
-    : Math.max(1, Math.floor((readerWidth - 2 * COL_PAD + COL_GAP) / (COL_WIDTH + COL_GAP)));
-  $: contentWidth = cols === 1
-    ? readerWidth
-    : cols * COL_WIDTH + (cols - 1) * COL_GAP + 2 * COL_PAD;
-  // column-width drives the CSS multi-column layout instead of column-count.
-  // WebKit does not create horizontal overflow pages for column-count:1 but
-  // does for column-width, which is what enables pagination in single-col mode.
-  $: colWidth = Math.round((contentWidth - 2 * COL_PAD - (cols - 1) * COL_GAP) / cols);
+  // Column layout — pure functions from paging.js; COL_PAD/COL_GAP applied via inline style
+  // so the same constants are used for both rendering and measurement.
+  $: cols         = calcCols(readerWidth);
+  $: colWidth     = calcColWidth(readerWidth, cols);
+  // column-width drives CSS multi-column instead of column-count — WebKit requires this
+  // for single-column horizontal overflow pagination to work.
+  $: contentWidth = calcContentWidth(cols, colWidth);
 
   function scheduleMeasure() {
     clearTimeout(_measureTimer);
     _measureTimer = setTimeout(measurePages, 50);
   }
 
+  // Apply padding and gap measurements directly from JS constants — eliminates any
+  // discrepancy between the values used in calculation and the values in the DOM.
+  function applyMeasure() {
+    if (!contentEl || !readerWidth) return;
+    pageStride = calcPageStride(contentEl.clientWidth);
+    if (pageStride <= 0) return;
+    totalPages = calcTotalPages(contentEl.scrollWidth, pageStride);
+    if (page >= totalPages) page = Math.max(0, totalPages - 1);
+
+    contentEl.querySelectorAll('img').forEach(img => {
+      if (!img.complete) {
+        img.addEventListener('load',  scheduleMeasure, { once: true });
+        img.addEventListener('error', scheduleMeasure, { once: true });
+      }
+    });
+  }
+
   async function measurePages() {
     const id = ++_measureId;
     await tick();
     if (id !== _measureId || !contentEl || !readerWidth) return;
-    // Double-RAF: ensures browser has completed CSS multi-column reflow after DOM changes.
+    // Double-RAF: gives browser time to complete CSS multi-column reflow.
     await new Promise(r => requestAnimationFrame(r));
     await new Promise(r => requestAnimationFrame(r));
     if (id !== _measureId || !contentEl || !readerWidth) return;
 
-    const style  = getComputedStyle(contentEl);
-    const padL   = parseFloat(style.paddingLeft)  || 0;
-    const padR   = parseFloat(style.paddingRight) || 0;
-    const gap    = parseFloat(style.columnGap)    || 0;
-    // pageStride = one page-width in the overflow direction, regardless of cols.
-    // Derivation: stride = cols*(colW+gap); colW = (clientW-padL-padR-(cols-1)*gap)/cols;
-    // so stride = clientW - padL - padR + gap.
-    pageStride   = contentEl.clientWidth - padL - padR + gap;
-    const raw    = (contentEl.scrollWidth - padL - padR + gap) / pageStride;
-    totalPages   = Math.max(1, Math.round(raw));
-    if (page >= totalPages) page = Math.max(0, totalPages - 1);
+    applyMeasure();
+
+    // Fallback: on initial load CSS multi-column reflow can lag past 2 frames.
+    // Re-check once after a short delay; the _measureId guard prevents stale runs.
+    setTimeout(() => { if (id === _measureId) applyMeasure(); }, 250);
   }
 
   // Reset page immediately when column count changes (window resize crossed boundary).
   $: { cols; page = 0; scheduleMeasure(); }
 
-  // Remeasure on any layout-relevant change.
-  $: if (selectedEntry) (readerWidth, fontSize, scheduleMeasure());
+  // Remeasure on any layout-relevant change (including readability mode toggle).
+  $: if (selectedEntry) (readerWidth, fontSize, originalContent, scheduleMeasure());
 
   $: filteredEntries = showRead
     ? entries
@@ -319,7 +324,8 @@
     originalContent  = null;
     fetchingOriginal = false;
     localStorage.setItem('lastArticleId', String(selectedEntry.id));
-    page = 0;
+    page       = 0;
+    totalPages = 1;
     scrollCursorIntoView();
     refreshStatus();
   }
@@ -523,9 +529,8 @@
         `<span class="yt-play">▶ Watch on YouTube</span>` +
         `</div>`
     );
-    // Ars Technica duplicates caption content as direct children of <figure>
-    // (both text nodes and elements like <a>) before the <figcaption>.
-    // Remove everything between the image/wrapper and the <figcaption>.
+    // Clean up figure/figcaption: remove non-image nodes before <figcaption>
+    // (some feeds duplicate caption text as siblings before the figcaption).
     const doc = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html');
     doc.querySelectorAll('figure').forEach(fig => {
       const cap = fig.querySelector(':scope > figcaption');
@@ -538,6 +543,46 @@
         if (!isImg) node.remove();
       }
     });
+
+    // Ars Technica (and similar feeds) emit images as bare <a><img></a> followed
+    // by a plain-text caption node — no <figure> wrapper. The caption text also
+    // repeats itself (sometimes multiple times) in the same text node.
+    // Wrap each image link + its caption text in <figure><figcaption> so CSS
+    // can style them, and strip the duplicated text.
+    function deduplicateCaption(rawText) {
+      const text = rawText.trim();
+      const len = text.length;
+      if (!len) return '';
+      // Minimum prefix length to test — long enough to avoid coincidental matches.
+      const minLen = Math.max(10, Math.floor(len * 0.08));
+      for (let i = minLen; i <= Math.floor(len * 0.7); i++) {
+        // If the text starting at position i begins with the same characters as
+        // the text from position 0, the caption repeats — keep only the first copy.
+        if (text.slice(i).trimStart().startsWith(text.slice(0, minLen))) {
+          return text.slice(0, i).trimEnd();
+        }
+      }
+      return text;
+    }
+
+    doc.querySelectorAll('a').forEach(link => {
+      if (link.closest('figure')) return;              // already inside a figure
+      if (!link.querySelector('img')) return;          // not an image link
+      if (link.textContent.trim()) return;             // link has visible text (alt text etc.)
+      const next = link.nextSibling;
+      if (!next || next.nodeType !== 3) return;        // no following text node
+      const caption = deduplicateCaption(next.textContent);
+      if (!caption) return;
+
+      const figure = doc.createElement('figure');
+      link.parentNode.insertBefore(figure, link);
+      figure.appendChild(link);
+      const figcap = doc.createElement('figcaption');
+      figcap.textContent = caption;
+      figure.appendChild(figcap);
+      next.remove();  // removes entire text node (incl. any orphan gallery captions within)
+    });
+
     return doc.body.innerHTML;
   }
 
@@ -669,7 +714,7 @@
         <div class="reader-viewport" style="width: {contentWidth}px">
           <div class="reader-content"
                bind:this={contentEl}
-               style="width: {contentWidth}px; column-width: {colWidth}px; height: 100%; transform: translateX(-{page * pageStride}px)">
+               style="width: {contentWidth}px; column-width: {colWidth}px; column-gap: {COL_GAP}px; padding: 36px {COL_PAD}px 64px; height: 100%; transform: translateX(-{page * pageStride}px)">
             <h1 class="article-title">{selectedEntry.title}</h1>
             <div class="article-meta">{selectedEntry.feed.title}  ·  {fullDate(selectedEntry.published_at)}{selectedEntry.fetched_at ? '  ·  Fetched ' + timeAgo(selectedEntry.fetched_at) : ''}</div>
             <div class="reader-controls">
@@ -1050,12 +1095,12 @@
   .reader-viewport {
     height: 100%;
     overflow: hidden;
+    margin: 0 auto;
   }
 
   .reader-content {
     height: 100%;
-    padding: 36px clamp(16px, 5%, 48px) 64px;
-    column-gap: 3em;
+    /* padding and column-gap set via inline style from JS constants */
     column-fill: auto;
     orphans: 3;
     widows: 3;
@@ -1234,10 +1279,12 @@
   }
   .article-body :global(.yt-thumb:hover .yt-play) { background: rgba(0,0,0,0.75); }
   .article-body :global(figcaption) {
-    font-size: 12px;
-    color: #9a7a58;
+    font-size: 11px;
+    color: #b8997a;
+    font-style: italic;
     text-align: center;
-    margin-top: 6px;
+    margin-top: 5px;
+    line-height: 1.4;
   }
 
   /* ── sticky title (pages 2+) ── */
