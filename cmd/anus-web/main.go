@@ -7,8 +7,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 
+	"github.com/BurntSushi/toml"
 	"github.com/slatkin/anus/internal/cache"
 	"github.com/slatkin/anus/pkg/app"
 	"github.com/slatkin/anus/pkg/config"
@@ -40,7 +42,7 @@ func main() {
 	defer a.Close()
 
 	mux := http.NewServeMux()
-	registerAPI(mux, a)
+	registerAPI(mux, a, cfg)
 	for _, hook := range startupHooks {
 		hook(mux)
 	}
@@ -53,7 +55,7 @@ func main() {
 	log.Fatal(http.ListenAndServe(":"+port, mux))
 }
 
-func registerAPI(mux *http.ServeMux, a *app.App) {
+func registerAPI(mux *http.ServeMux, a *app.App, cfg config.Config) {
 	mux.HandleFunc("GET /api/cached", func(w http.ResponseWriter, r *http.Request) {
 		result, err := a.FetchCached()
 		if err != nil {
@@ -131,6 +133,39 @@ func registerAPI(mux *http.ServeMux, a *app.App) {
 			return
 		}
 		writeJSON(w, result)
+	})
+
+	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, cfg)
+	})
+
+	mux.HandleFunc("POST /api/config", func(w http.ResponseWriter, r *http.Request) {
+		var incoming config.Config
+		if err := json.NewDecoder(r.Body).Decode(&incoming); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		path, err := config.GetConfigFilepath()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		f, err := os.Create(path)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer f.Close()
+		if err := toml.NewEncoder(f).Encode(incoming); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		cfg = incoming
+		w.WriteHeader(http.StatusNoContent)
 	})
 
 	mux.HandleFunc("GET /api/fetch-content", func(w http.ResponseWriter, r *http.Request) {

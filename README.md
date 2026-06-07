@@ -10,7 +10,7 @@ anus can be used two ways: as a local client or as a web service running in a do
 |---|---|---|
 | **What** | Native desktop app (WebKit2GTK) | Containerised web service |
 | **Install** | AUR (`anus`) or build from source | Docker / `docker compose` |
-| **Config** | `~/.config/anus/config.toml` | Environment variables |
+| **Config** | `~/.config/anus/config.toml` | Settings UI or environment variables, persisted to `/data/config.toml` |
 
 ---
 
@@ -22,8 +22,7 @@ anus can be used two ways: as a local client or as a web service running in a do
 docker run -d \
   -e MINIFLUX_URL=https://your-miniflux-instance \
   -e MINIFLUX_API_KEY=your-api-key \
-  -v anus-cache:/data/cache \
-  -e CACHE_DIR=/data/cache \
+  -v anus-data:/data \
   -p 8080:8080 \
   ghcr.io/slatkin/anus-web:latest
 ```
@@ -40,12 +39,13 @@ services:
     environment:
       MINIFLUX_URL: https://your-miniflux-instance
       MINIFLUX_API_KEY: your-api-key
-      ALLOW_INVALID_CERTS: false
-      CACHE_EXPIRY_DAYS: 30
-      REMEMBER_READ_POSITION: true
+      DATA_DIR: /data
       CACHE_DIR: /data
     volumes:
-      - /docker/anus:/data
+      - anus-data:/data
+
+volumes:
+  anus-data:
 ```
 
 ```bash
@@ -62,10 +62,10 @@ In your Miniflux instance: **Settings → API Keys → Create a new API key**. C
 |----------|----------|---------|-------------|
 | `MINIFLUX_URL` | yes | — | Base URL of your Miniflux instance |
 | `MINIFLUX_API_KEY` | yes | — | Miniflux API key (Settings → API Keys) |
+| `DATA_DIR` | no | `/data` | Persistent data directory (config + cache); mount a volume here |
+| `CACHE_DIR` | no | `DATA_DIR` | Override cache location (defaults to same as `DATA_DIR`) |
 | `ALLOW_INVALID_CERTS` | no | `false` | Skip TLS verification |
 | `CACHE_EXPIRY_DAYS` | no | `30` | Article cache retention in days |
-| `CACHE_DIR` | no | `~/.cache/anus` | Path to cache directory (use a volume) |
-| `REMEMBER_READ_POSITION` | no | `true` | Restore scroll position on revisit |
 | `PORT` | no | `8080` | HTTP listen port |
 
 ---

@@ -876,6 +876,12 @@
       {#if showScrollbar}
         <div class="custom-scrollbar">
           <div class="custom-scrollbar-thumb"
+            role="scrollbar"
+            aria-controls="nav-pane"
+            aria-valuenow={thumbTop}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            tabindex="0"
             style="top:{thumbTop}px; height:{thumbHeight}px"
             on:mousedown={onThumbMousedown}>
           </div>
@@ -896,7 +902,7 @@
 
   </div><!-- /left-col -->
 
-    <div class="splitter" role="separator" class:hidden={navCollapsed} class:web={import.meta.env.VITE_API !== 'wails'} on:mousedown={startNavResize}></div>
+    <div class="splitter" role="separator" aria-label="Resize navigation panel" tabindex="0" class:hidden={navCollapsed} class:web={import.meta.env.VITE_API !== 'wails'} on:mousedown={startNavResize} on:keydown={e => (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && startNavResize(e)}></div>
 
     <div class="reader-pane" bind:this={readerEl} bind:clientWidth={readerWidth}>
       {#if selectedEntry}
@@ -962,7 +968,7 @@
       <div class="settings-body">
         <label class="settings-label settings-row">
           <span>Display scrollbar in feed list</span>
-          <button class="settings-toggle" class:on={showScrollbar} on:click={() => showScrollbar = !showScrollbar} role="switch" aria-checked={showScrollbar}></button>
+          <button class="settings-toggle" class:on={showScrollbar} on:click={() => showScrollbar = !showScrollbar} role="switch" aria-checked={showScrollbar} aria-label="Display scrollbar in feed list"></button>
         </label>
         <label class="settings-label">
           <span>Cache expiry (days)</span>
@@ -1154,7 +1160,7 @@
   }
 
   .splitter {
-    width: 7px;
+    width: 5px;
     flex-shrink: 0;
     cursor: col-resize;
     background: transparent;

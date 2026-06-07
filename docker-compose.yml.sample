@@ -5,11 +5,11 @@ services:
     ports:
       - "8080:8080"
     environment:
-      MINIFLUX_API_KEY: c6f7dabd7e81626fc84b1a2f484f516e4bc5b8a4088106470a3b46827bf325ee
       MINIFLUX_URL: https://rss.poo.town
+      MINIFLUX_API_KEY: c6f7dabd7e81626fc84b1a2f484f516e4bc5b8a4088106470a3b46827bf325ee
       ALLOW_INVALID_CERTS: false
       CACHE_EXPIRY_DAYS: 30
-      REMEMBER_READ_POSITION: true
+      DATA_DIR: /data
       CACHE_DIR: /data
     volumes:
       - /docker/anus:/data
