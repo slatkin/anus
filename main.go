@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/BurntSushi/toml"
 	"github.com/pkg/browser"
 	"github.com/slatkin/anus/frontend"
 	"github.com/slatkin/anus/internal/cache"
@@ -28,7 +29,7 @@ type App struct {
 func newApp(cfg config.Config) *App {
 	client := miniflux.NewClient(cfg.ServerUrl, cfg.ApiKey, cfg.AllowInvalidCerts)
 	return &App{
-		App: app.New(client, cfg.CacheExpiryDays, cfg.RememberReadPosition),
+		App: app.New(client, cfg.CacheExpiryDays),
 		cfg: cfg,
 	}
 }
@@ -55,6 +56,28 @@ func (a *App) startup(ctx context.Context) {
 
 func (a *App) shutdown(_ context.Context) {
 	a.App.Close()
+}
+
+func (a *App) GetConfig() config.Config {
+	return a.cfg
+}
+
+func (a *App) SaveConfig(cfg config.Config) error {
+	path, err := config.GetConfigFilepath()
+	if err != nil {
+		return err
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if err := toml.NewEncoder(f).Encode(cfg); err != nil {
+		return err
+	}
+	a.cfg = cfg
+	app.ApplyConfig(a.App, cfg.CacheExpiryDays)
+	return nil
 }
 
 func (a *App) OpenURL(url string) {

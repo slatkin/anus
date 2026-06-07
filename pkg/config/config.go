@@ -11,15 +11,12 @@ import (
 )
 
 type Config struct {
-	ApiKey               string   `toml:"api_key"`
-	ServerUrl            string   `toml:"server_url"`
-	AllowInvalidCerts    bool     `toml:"allow_invalid_certs"`
-	NerdFont             bool     `toml:"nerd_font"`
-	ColorScheme          string   `toml:"color_scheme"`
-	StripLinkFeeds       []string `toml:"strip_link_feeds"`
-	CacheExpiryDays      int      `toml:"cache_expiry_days"`
-	RememberReadPosition bool     `toml:"remember_read_position"`
-	CacheDir             string   `toml:"-"`
+	ApiKey                 string   `toml:"api_key"                  json:"api_key"`
+	ServerUrl              string   `toml:"server_url"               json:"server_url"`
+	AllowInvalidCerts      bool     `toml:"allow_invalid_certs"      json:"allow_invalid_certs"`
+	PollingIntervalMinutes int      `toml:"polling_interval_minutes" json:"polling_interval_minutes"`
+	CacheExpiryDays        int      `toml:"cache_expiry_days"        json:"cache_expiry_days"`
+	CacheDir               string   `toml:"-"                        json:"-"`
 }
 
 func DefaultConfig() Config {
@@ -27,10 +24,8 @@ func DefaultConfig() Config {
 		ApiKey:               "FIXME",
 		ServerUrl:            "FIXME",
 		AllowInvalidCerts:    false,
-		NerdFont:             false,
-		ColorScheme:          "default",
-		CacheExpiryDays:      30,
-		RememberReadPosition: true,
+		CacheExpiryDays:        30,
+		PollingIntervalMinutes: 10,
 	}
 }
 
@@ -72,32 +67,19 @@ func Init() (string, error) {
 	return path, nil
 }
 
+// Load builds config by starting with defaults, applying env vars, then
+// overlaying config.toml on top (if it exists). Config file values win over
+// env vars, so settings saved via the UI always take precedence.
 func Load() (Config, error) {
-	path, err := GetConfigFilepath()
-	if err != nil {
-		return Config{}, err
-	}
-
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return Config{}, fmt.Errorf("config file not found at %s. run with --init to create one", path)
-	}
-
-	var cfg Config
-	if _, err := toml.DecodeFile(path, &cfg); err != nil {
-		return Config{}, fmt.Errorf("error parsing config file: %w", err)
-	}
-
-	return validate(cfg, path)
-}
-
-// LoadFromEnv reads configuration from environment variables.
-// Required: MINIFLUX_URL, MINIFLUX_API_KEY.
-// Optional: ALLOW_INVALID_CERTS, CACHE_EXPIRY_DAYS, CACHE_DIR, REMEMBER_READ_POSITION.
-func LoadFromEnv() (Config, error) {
 	cfg := DefaultConfig()
-	cfg.ApiKey = os.Getenv("MINIFLUX_API_KEY")
-	cfg.ServerUrl = os.Getenv("MINIFLUX_URL")
 
+	// Apply env vars.
+	if v := os.Getenv("MINIFLUX_API_KEY"); v != "" {
+		cfg.ApiKey = v
+	}
+	if v := os.Getenv("MINIFLUX_URL"); v != "" {
+		cfg.ServerUrl = v
+	}
 	if v := os.Getenv("ALLOW_INVALID_CERTS"); v != "" {
 		cfg.AllowInvalidCerts, _ = strconv.ParseBool(v)
 	}
@@ -109,21 +91,27 @@ func LoadFromEnv() (Config, error) {
 	if v := os.Getenv("CACHE_DIR"); v != "" {
 		cfg.CacheDir = v
 	}
-	if v := os.Getenv("REMEMBER_READ_POSITION"); v != "" {
-		cfg.RememberReadPosition, _ = strconv.ParseBool(v)
+
+	// Overlay config file on top if it exists.
+	if path, err := GetConfigFilepath(); err == nil {
+		if _, err := os.Stat(path); err == nil {
+			if _, err := toml.DecodeFile(path, &cfg); err != nil {
+				return Config{}, fmt.Errorf("error parsing config file: %w", err)
+			}
+		}
 	}
 
-	return validate(cfg, "environment")
+	return validate(cfg)
 }
 
-func validate(cfg Config, source string) (Config, error) {
+func validate(cfg Config) (Config, error) {
 	if cfg.ApiKey == "" || cfg.ApiKey == "FIXME" {
-		return Config{}, fmt.Errorf("api_key is not configured in %s", source)
+		return Config{}, fmt.Errorf("api_key is not configured (set MINIFLUX_API_KEY or api_key in config.toml)")
 	}
 
 	cfg.ServerUrl = strings.TrimSpace(cfg.ServerUrl)
 	if cfg.ServerUrl == "" || cfg.ServerUrl == "FIXME" {
-		return Config{}, fmt.Errorf("server_url is not configured in %s", source)
+		return Config{}, fmt.Errorf("server_url is not configured (set MINIFLUX_URL or server_url in config.toml)")
 	}
 	cfg.ServerUrl = strings.TrimSuffix(cfg.ServerUrl, "/")
 

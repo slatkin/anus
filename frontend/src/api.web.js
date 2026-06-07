@@ -53,3 +53,13 @@ export function OpenURL(url) {
 }
 
 export function Show() {}
+
+export async function GetConfig() {
+  const res = await fetch('/api/config');
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function SaveConfig(cfg) {
+  return post('/api/config', cfg);
+}

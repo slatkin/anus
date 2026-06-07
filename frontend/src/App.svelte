@@ -1,8 +1,8 @@
 <script>
   import { onMount, onDestroy, tick } from 'svelte';
   import { fade, fly } from 'svelte/transition';
-  import { FetchCached, FetchEntries, RefreshAndFetch, FetchArticleContent, MarkRead, MarkUnread, ToggleStar, SaveEntry, OpenURL, Show } from './api.js';
-  import { BookOpen, Bookmark, ExternalLink, EyeOff, Minus, Plus } from 'lucide-svelte';
+  import { FetchCached, FetchEntries, RefreshAndFetch, FetchArticleContent, MarkRead, MarkUnread, ToggleStar, SaveEntry, OpenURL, Show, GetConfig, SaveConfig } from './api.js';
+  import { BookOpen, Bookmark, ExternalLink, EyeOff, Minus, Plus, Settings } from 'lucide-svelte';
   import { COL_PAD, COL_GAP, COL_PAD_TOP, COL_PAD_BOT, calcCols, calcColWidth, calcContentWidth, calcPageStride, calcTotalPages } from './paging.js';
 
   const MODE_ENTRIES = 'entries';
@@ -50,14 +50,43 @@
   let _measureTimer = null;
   let _measureId = 0;
   let itemEls = [];
-  let showRead   = localStorage.getItem('showRead')   !== 'false';
-  let sortOldest = localStorage.getItem('sortOldest') === 'true';
-  let grouped    = localStorage.getItem('grouped')    !== 'false';
+  let showRead      = localStorage.getItem('showRead')      !== 'false';
+  let sortOldest    = localStorage.getItem('sortOldest')    === 'true';
+  let grouped       = localStorage.getItem('grouped')       !== 'false';
+  let showScrollbar = localStorage.getItem('showScrollbar') === 'true';
+  let navPaneEl = null;
+  let thumbTop = 0;
+  let thumbHeight = 0;
+
+  function updateScrollThumb() {
+    if (!navPaneEl) return;
+    const { scrollTop, scrollHeight, clientHeight } = navPaneEl;
+    thumbHeight = Math.max(30, (clientHeight / scrollHeight) * clientHeight);
+    thumbTop = (scrollTop / (scrollHeight - clientHeight)) * (clientHeight - thumbHeight);
+  }
+
+  function onThumbMousedown(e) {
+    const startY = e.clientY;
+    const startScrollTop = navPaneEl.scrollTop;
+    e.preventDefault();
+
+    function onMove(e) {
+      const { scrollHeight, clientHeight } = navPaneEl;
+      navPaneEl.scrollTop = startScrollTop + (e.clientY - startY) * (scrollHeight / clientHeight);
+    }
+    function onUp() {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
   let collapsedFeeds = new Set(JSON.parse(localStorage.getItem('collapsedFeeds') || '[]'));
 
-  $: localStorage.setItem('showRead',   String(showRead));
-  $: localStorage.setItem('sortOldest', String(sortOldest));
-  $: localStorage.setItem('grouped',    String(grouped));
+  $: localStorage.setItem('showRead',      String(showRead));
+  $: localStorage.setItem('sortOldest',    String(sortOldest));
+  $: localStorage.setItem('grouped',       String(grouped));
+  $: localStorage.setItem('showScrollbar', String(showScrollbar));
   $: localStorage.setItem('collapsedFeeds', JSON.stringify([...collapsedFeeds]));
   let navWidth     = parseInt(localStorage.getItem('navWidth') || '300', 10);
   let navCollapsed = localStorage.getItem('navCollapsed') === 'true';
@@ -173,9 +202,13 @@
     await tick();
     Show();
     fetchEntries(true);
-    const poll  = setInterval(() => fetchEntries(true), 10 * 60 * 1000);
+    const cfg = await GetConfig().catch(() => null);
+    const intervalMs = (cfg?.polling_interval_minutes ?? 10) > 0
+      ? (cfg?.polling_interval_minutes ?? 10) * 60 * 1000
+      : null;
+    const poll  = intervalMs ? setInterval(() => fetchEntries(true), intervalMs) : null;
     const clock = setInterval(() => { now = Date.now(); }, 60 * 1000);
-    return () => { clearInterval(poll); clearInterval(clock); };
+    return () => { if (poll) clearInterval(poll); clearInterval(clock); };
   });
 
   onDestroy(() => {
@@ -194,9 +227,8 @@
       loading    = false;
       refreshStatus();
       await tick();
-      const rememberPos = result.remember_read_position ?? true;
-      const savedId     = rememberPos ? parseInt(localStorage.getItem('lastArticleId') || '0', 10) : 0;
-      const savedIdx    = savedId ? displayEntries.findIndex(e => e.id === savedId) : -1;
+      const savedId  = parseInt(localStorage.getItem('lastArticleId') || '0', 10);
+      const savedIdx = savedId ? displayEntries.findIndex(e => e.id === savedId) : -1;
       openArticle(savedIdx !== -1 ? savedIdx : 0);
     } catch (_) {
       // cache unavailable — fall through to live fetch
@@ -224,9 +256,8 @@
       }
       if (!selectedEntry && entries.length > 0) {
         await tick();
-        const rememberPos = result.remember_read_position ?? true;
-        const savedId     = rememberPos ? parseInt(localStorage.getItem('lastArticleId') || '0', 10) : 0;
-        const savedIdx    = savedId ? displayEntries.findIndex(e => e.id === savedId) : -1;
+        const savedId  = parseInt(localStorage.getItem('lastArticleId') || '0', 10);
+        const savedIdx = savedId ? displayEntries.findIndex(e => e.id === savedId) : -1;
         openArticle(savedIdx !== -1 ? savedIdx : 0);
       }
     } catch (e) {
@@ -712,6 +743,7 @@
     return out;
   }
 
+  $: displayItems, updateScrollThumb();
   $: displayItems = (now, collapsedFeeds, mode === MODE_FEEDS
     ? feeds.map((f, i) => ({
         type:      'item',
@@ -731,6 +763,34 @@
           sub:       (e.starred ? '★  ' : '') + e.feed.title + '  ·  ' + timeAgo(e.published_at),
           unread:    e.status === 'unread',
         })));
+
+  // ── settings ──────────────────────────────────────────────────────────
+  let settingsOpen = false;
+  let settingsCfg  = null;
+  let settingsSaving = false;
+
+  async function openSettings() {
+    try {
+      settingsCfg = await GetConfig();
+    } catch (e) {
+      showToast('Failed to load config: ' + e, 4000);
+      return;
+    }
+    settingsOpen = true;
+  }
+
+  async function saveSettings() {
+    settingsSaving = true;
+    try {
+      await SaveConfig(settingsCfg);
+      settingsOpen = false;
+      showToast('Settings saved', 2500);
+    } catch (e) {
+      showToast('Save failed: ' + e, 4000);
+    } finally {
+      settingsSaving = false;
+    }
+  }
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
@@ -780,7 +840,8 @@
         </div>
       </div>
 
-      <div class="nav-pane nav-collapsible">
+      <div class="nav-pane-wrap nav-collapsible">
+      <div class="nav-pane" bind:this={navPaneEl} on:scroll={updateScrollThumb}>
       {#if loading}
         <div class="nav-empty">Loading…</div>
       {:else if error}
@@ -790,7 +851,9 @@
       {:else}
         {#each displayItems as item}
           {#if item.type === 'header'}
-            <div class="nav-feed-header" on:dblclick={() => toggleFeedCollapse(item.feedId)}>
+            <div class="nav-feed-header" role="button" tabindex="0"
+              on:dblclick={() => toggleFeedCollapse(item.feedId)}
+              on:keydown={e => e.key === 'Enter' && toggleFeedCollapse(item.feedId)}>
               <span class="feed-header-title">{item.title}</span>
               {#if grouped && !item.collapsed}
                 <button class="feed-mark-read" on:click|stopPropagation={() => markFeedRead(item.feedId)}>Mark read</button>
@@ -799,10 +862,13 @@
           {:else}
             <div
               class="nav-item"
+              role="button"
+              tabindex="0"
               class:selected={item.cursorIdx === activeCursor}
               class:open={item.id === selectedEntry?.id && mode === MODE_ENTRIES}
               bind:this={itemEls[item.cursorIdx]}
               on:click={() => mode === MODE_FEEDS ? selectFeed(item.cursorIdx) : openArticle(item.cursorIdx)}
+              on:keydown={e => e.key === 'Enter' && (mode === MODE_FEEDS ? selectFeed(item.cursorIdx) : openArticle(item.cursorIdx))}
             >
               <div class="nav-title" class:unread={item.unread}>{item.title}</div>
               <div class="nav-sub">{item.sub}</div>
@@ -810,11 +876,27 @@
           {/if}
         {/each}
       {/if}
+      </div><!-- /nav-pane -->
+      {#if showScrollbar}
+        <div class="custom-scrollbar">
+          <div class="custom-scrollbar-thumb"
+            style="top:{thumbTop}px; height:{thumbHeight}px"
+            on:mousedown={onThumbMousedown}>
+          </div>
+        </div>
+      {/if}
+      </div><!-- /nav-pane-wrap -->
+
+      <div class="toolbar toolbar-nav-bottom nav-collapsible">
+        <div class="nav-bottom-spacer"></div>
+        <button class="nav-arrow-btn" on:click={openSettings} title="Settings">
+          <Settings size={14}/>
+        </button>
       </div>
 
   </div><!-- /left-col -->
 
-    <div class="splitter" class:hidden={navCollapsed} class:web={import.meta.env.VITE_API !== 'wails'} on:mousedown={startNavResize}></div>
+    <div class="splitter" role="separator" class:hidden={navCollapsed} class:web={import.meta.env.VITE_API !== 'wails'} on:mousedown={startNavResize}></div>
 
     <div class="reader-pane" bind:this={readerEl} bind:clientWidth={readerWidth}>
       {#if selectedEntry}
@@ -842,7 +924,7 @@
               <button class="ctrl-btn" on:click={saveEntry} title="Save to Miniflux"><Bookmark size={14}/></button>
               <button class="ctrl-btn" on:click={openBrowser} title="Open in browser"><ExternalLink size={14}/></button>
             </div>
-            <div class="article-body" style="font-size: {fontSize}px" on:click={handleArticleClick} on:error|capture={handleArticleImgError}>
+            <div class="article-body" role="presentation" style="font-size: {fontSize}px" on:click={handleArticleClick} on:keydown={handleArticleClick} on:error|capture={handleArticleImgError}>
               {@html processContent(originalContent ?? selectedEntry.content)}
             </div>
           </div>
@@ -866,6 +948,39 @@
     </div>
 
   </div><!-- /body -->
+
+{#if settingsOpen && settingsCfg}
+  <div class="settings-backdrop" role="presentation"
+    on:click|self={() => settingsOpen = false}
+    on:keydown={e => e.key === 'Escape' && (settingsOpen = false)}
+    transition:fade={{ duration: 150 }}>
+    <div class="settings-modal" transition:fly={{ y: 20, duration: 180 }}>
+      <div class="settings-header">
+        <span class="settings-title">Settings</span>
+        <button class="settings-close" on:click={() => settingsOpen = false}>✕</button>
+      </div>
+      <div class="settings-body">
+        <label class="settings-label settings-row">
+          <span>Display scrollbar in feed list</span>
+          <button class="settings-toggle" class:on={showScrollbar} on:click={() => showScrollbar = !showScrollbar} role="switch" aria-checked={showScrollbar}></button>
+        </label>
+        <label class="settings-label">
+          <span>Cache expiry (days)</span>
+          <input class="settings-input settings-input-sm" type="number" min="1" bind:value={settingsCfg.cache_expiry_days}/>
+        </label>
+        <label class="settings-label">
+          <span>Polling interval (minutes, 0 = off)</span>
+          <input class="settings-input settings-input-sm" type="number" min="0" bind:value={settingsCfg.polling_interval_minutes}/>
+        </label>
+      </div>
+      <div class="settings-footer">
+        <button class="settings-save" on:click={saveSettings} disabled={settingsSaving}>
+          {settingsSaving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 </div><!-- /app -->
 
@@ -1058,6 +1173,12 @@
   .splitter.hidden { width: 0; pointer-events: none; }
 
   /* ── nav pane ── */
+  .nav-pane-wrap {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
   .nav-pane {
     flex: 1;
     overflow-y: auto;
@@ -1065,7 +1186,25 @@
     min-height: 0;
     scrollbar-width: none;
   }
-  .nav-pane::-webkit-scrollbar { display: none; }
+  :global(.nav-pane::-webkit-scrollbar) { display: none; }
+  .custom-scrollbar {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: #1a1b26;
+    z-index: 10;
+    flex-shrink: 0;
+  }
+  .custom-scrollbar-thumb {
+    position: absolute;
+    width: 4px;
+    background: #c0caf5;
+    border-radius: 4px;
+    cursor: pointer;
+    user-select: none;
+  }
 
   .nav-feed-header {
     display: flex;
@@ -1426,5 +1565,155 @@
     pointer-events: none;
     z-index: 20;
   }
+
+  .toolbar-nav-bottom {
+    border-top: 1px solid #414868;
+    border-bottom: none;
+    justify-content: flex-end;
+    padding: 6px 4px;
+  }
+
+  .nav-bottom-spacer { flex: 1; }
+
+  .settings-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .settings-modal {
+    background: #1a1b26;
+    border: 1px solid #414868;
+    border-radius: 8px;
+    width: 420px;
+    max-width: 95vw;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+
+  .settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #414868;
+    flex-shrink: 0;
+  }
+
+  .settings-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: #fdfdfd;
+    letter-spacing: 0.03em;
+  }
+
+  .settings-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #737aa2;
+    font-size: 14px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: color 80ms, background 80ms;
+  }
+  .settings-close:hover { background: #24283b; color: #c0caf5; }
+
+  .settings-body {
+    overflow-y: auto;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
+  }
+
+  .settings-label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+    color: #fdfdfd;
+    letter-spacing: 0.02em;
+  }
+
+  .settings-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+
+
+  .settings-input {
+    background: #24283b;
+    border: 1px solid #414868;
+    border-radius: 4px;
+    color: #c0caf5;
+    font-family: inherit;
+    font-size: 14px;
+    padding: 6px 10px;
+    outline: none;
+    transition: border-color 120ms;
+  }
+  .settings-input:focus { border-color: #7aa2f7; }
+
+  .settings-input-sm { width: 80px; }
+
+  .settings-toggle {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    border-radius: 10px;
+    border: none;
+    background: #414868;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 150ms;
+    padding: 0;
+  }
+  .settings-toggle.on { background: #7aa2f7; }
+  .settings-toggle::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fdfdfd;
+    transition: transform 150ms;
+  }
+  .settings-toggle.on::after { transform: translateX(16px); }
+
+
+  .settings-footer {
+    padding: 10px 16px;
+    border-top: 1px solid #414868;
+    display: flex;
+    justify-content: flex-end;
+    flex-shrink: 0;
+  }
+
+  .settings-save {
+    background: #2d3f76;
+    border: none;
+    border-radius: 4px;
+    color: #7aa2f7;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 6px 18px;
+    transition: background 80ms, color 80ms;
+  }
+  .settings-save:hover:not(:disabled)  { background: #3d59a1; color: #c0caf5; }
+  .settings-save:disabled { opacity: 0.5; cursor: default; }
 
 </style>

@@ -18,6 +18,10 @@ export function FetchEntries() {
   return window['go']['main']['App']['FetchEntries']();
 }
 
+export function GetConfig() {
+  return window['go']['main']['App']['GetConfig']();
+}
+
 export function MarkRead(arg1) {
   return window['go']['main']['App']['MarkRead'](arg1);
 }
@@ -36,6 +40,10 @@ export function OpenURL(arg1) {
 
 export function RefreshAndFetch() {
   return window['go']['main']['App']['RefreshAndFetch']();
+}
+
+export function SaveConfig(arg1) {
+  return window['go']['main']['App']['SaveConfig'](arg1);
 }
 
 export function SaveEntry(arg1) {

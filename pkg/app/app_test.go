@@ -84,7 +84,7 @@ func entry(id int, status miniflux.ReadStatus) miniflux.FeedEntry {
 func newApp(t *testing.T, mc *mockClient) (*app.App, string) {
 	t.Helper()
 	dir := t.TempDir()
-	a := app.New(mc, 30, true)
+	a := app.New(mc, 30)
 	if err := a.Open(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestFetchEntries_FallsBackToCacheOnNetworkError(t *testing.T) {
 	// Seed the cache with a working client first.
 	seeder := app.New(&mockClient{
 		unread: []miniflux.FeedEntry{entry(10, miniflux.ReadStatusUnread)},
-	}, 30, true)
+	}, 30)
 	if err := seeder.Open(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestFetchEntries_FallsBackToCacheOnNetworkError(t *testing.T) {
 
 	// Now open a new app with a broken client against the same cache dir.
 	mc := &mockClient{unreadErr: errors.New("network down")}
-	a := app.New(mc, 30, true)
+	a := app.New(mc, 30)
 	if err := a.Open(dir); err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestFetchEntries_FallsBackToCacheOnNetworkError(t *testing.T) {
 
 func TestFetchEntries_ErrorWhenNoCacheAndNetworkDown(t *testing.T) {
 	mc := &mockClient{unreadErr: errors.New("network down")}
-	a := app.New(mc, 30, true)
+	a := app.New(mc, 30)
 	// No Open call — cache is nil.
 	t.Cleanup(func() { a.Close() })
 	_, err := a.FetchEntries()
@@ -175,19 +175,6 @@ func TestFetchEntries_MergesDeduplicated(t *testing.T) {
 		if count > 1 {
 			t.Errorf("entry %d appears %d times, want 1", id, count)
 		}
-	}
-}
-
-func TestFetchEntries_RememberReadPosition(t *testing.T) {
-	mc := &mockClient{unread: []miniflux.FeedEntry{entry(1, miniflux.ReadStatusUnread)}}
-	a := app.New(mc, 30, true)
-	t.Cleanup(func() { a.Close() })
-	result, err := a.FetchEntries()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !result.RememberReadPosition {
-		t.Error("RememberReadPosition should be true")
 	}
 }
 

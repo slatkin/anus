@@ -19,7 +19,6 @@ export namespace app {
 	export class FetchResult {
 	    entries: miniflux.FeedEntry[];
 	    feeds: FeedSummary[];
-	    remember_read_position: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new FetchResult(source);
@@ -29,7 +28,6 @@ export namespace app {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.entries = this.convertValues(source["entries"], miniflux.FeedEntry);
 	        this.feeds = this.convertValues(source["feeds"], FeedSummary);
-	        this.remember_read_position = source["remember_read_position"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -49,6 +47,31 @@ export namespace app {
 		    }
 		    return a;
 		}
+	}
+
+}
+
+export namespace config {
+	
+	export class Config {
+	    api_key: string;
+	    server_url: string;
+	    allow_invalid_certs: boolean;
+	    polling_interval_minutes: number;
+	    cache_expiry_days: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Config(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.api_key = source["api_key"];
+	        this.server_url = source["server_url"];
+	        this.allow_invalid_certs = source["allow_invalid_certs"];
+	        this.polling_interval_minutes = source["polling_interval_minutes"];
+	        this.cache_expiry_days = source["cache_expiry_days"];
+	    }
 	}
 
 }

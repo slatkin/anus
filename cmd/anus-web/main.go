@@ -19,7 +19,7 @@ import (
 var startupHooks []func(*http.ServeMux)
 
 func main() {
-	cfg, err := config.LoadFromEnv()
+	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("config error: %v", err)
 	}
@@ -33,7 +33,7 @@ func main() {
 	}
 
 	client := miniflux.NewClient(cfg.ServerUrl, cfg.ApiKey, cfg.AllowInvalidCerts)
-	a := app.New(client, cfg.CacheExpiryDays, cfg.RememberReadPosition)
+	a := app.New(client, cfg.CacheExpiryDays)
 	if err := a.Open(cacheDir); err != nil {
 		log.Printf("Warning: %v (running without cache)", err)
 	}

@@ -24,21 +24,19 @@ type MinifluxClient interface {
 }
 
 type App struct {
-	client               MinifluxClient
-	cache                *cache.Cache
-	cacheExpiryDays      int
-	rememberReadPosition bool
-	articleCache         map[int]string
-	mu                   sync.Mutex
+	client          MinifluxClient
+	cache           *cache.Cache
+	cacheExpiryDays int
+	articleCache    map[int]string
+	mu              sync.Mutex
 }
 
 // New creates an App. Call Open before use and Close when done.
-func New(client MinifluxClient, cacheExpiryDays int, rememberReadPosition bool) *App {
+func New(client MinifluxClient, cacheExpiryDays int) *App {
 	return &App{
-		client:               client,
-		cacheExpiryDays:      cacheExpiryDays,
-		rememberReadPosition: rememberReadPosition,
-		articleCache:         make(map[int]string),
+		client:          client,
+		cacheExpiryDays: cacheExpiryDays,
+		articleCache:    make(map[int]string),
 	}
 }
 
@@ -68,9 +66,8 @@ type FeedSummary struct {
 }
 
 type FetchResult struct {
-	Entries              []miniflux.FeedEntry `json:"entries"`
-	Feeds                []FeedSummary        `json:"feeds"`
-	RememberReadPosition bool                 `json:"remember_read_position"`
+	Entries []miniflux.FeedEntry `json:"entries"`
+	Feeds   []FeedSummary        `json:"feeds"`
 }
 
 // ── methods ───────────────────────────────────────────────────────────────
@@ -78,14 +75,14 @@ type FetchResult struct {
 // FetchCached returns whatever is in the local cache without hitting the network.
 func (a *App) FetchCached() (*FetchResult, error) {
 	if a.cache == nil {
-		return &FetchResult{RememberReadPosition: a.rememberReadPosition}, nil
+		return &FetchResult{}, nil
 	}
 	cached, err := a.cache.All()
 	if err != nil {
 		return nil, err
 	}
 	sortByDate(cached)
-	return &FetchResult{Entries: cached, Feeds: buildFeedList(cached), RememberReadPosition: a.rememberReadPosition}, nil
+	return &FetchResult{Entries: cached, Feeds: buildFeedList(cached)}, nil
 }
 
 func (a *App) FetchEntries() (*FetchResult, error) {
@@ -130,7 +127,7 @@ func (a *App) FetchEntries() (*FetchResult, error) {
 			return nil, fetchErr
 		}
 		sortByDate(cached)
-		return &FetchResult{Entries: cached, Feeds: buildFeedList(cached), RememberReadPosition: a.rememberReadPosition}, nil
+		return &FetchResult{Entries: cached, Feeds: buildFeedList(cached)}, nil
 	}
 
 	merged := make([]miniflux.FeedEntry, len(fresh))
@@ -162,7 +159,7 @@ func (a *App) FetchEntries() (*FetchResult, error) {
 	}
 
 	sortByDate(merged)
-	return &FetchResult{Entries: merged, Feeds: buildFeedList(merged), RememberReadPosition: a.rememberReadPosition}, nil
+	return &FetchResult{Entries: merged, Feeds: buildFeedList(merged)}, nil
 }
 
 func (a *App) RefreshAndFetch() (*FetchResult, error) {
@@ -221,6 +218,12 @@ func (a *App) ToggleStar(id int) error {
 
 func (a *App) SaveEntry(id int) error {
 	return a.client.SaveEntry(id)
+}
+
+func ApplyConfig(a *App, cacheExpiryDays int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cacheExpiryDays = cacheExpiryDays
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────
