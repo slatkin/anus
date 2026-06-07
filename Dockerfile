@@ -16,5 +16,7 @@ RUN go build -tags production -o /anus-web ./cmd/anus-web
 FROM alpine:latest
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /anus-web /usr/local/bin/anus-web
+ENV DATA_DIR=/data
+VOLUME /data
 EXPOSE 8080
 CMD ["anus-web"]

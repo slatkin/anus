@@ -30,12 +30,14 @@ func DefaultConfig() Config {
 }
 
 func GetConfigFilepath() (string, error) {
+	if d := os.Getenv("DATA_DIR"); d != "" {
+		return filepath.Join(d, "config.toml"), nil
+	}
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("could not find user config dir: %w", err)
 	}
-	path := filepath.Join(configDir, "anus", "config.toml")
-	return path, nil
+	return filepath.Join(configDir, "anus", "config.toml"), nil
 }
 
 func Init() (string, error) {

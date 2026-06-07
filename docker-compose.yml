@@ -7,13 +7,13 @@ services:
     environment:
       MINIFLUX_URL: "https://your-miniflux-instance"
       MINIFLUX_API_KEY: "your-api-key"
-      CACHE_DIR: /data/cache
+      DATA_DIR: /data
+      CACHE_DIR: /data
       # ALLOW_INVALID_CERTS: "false"
       # CACHE_EXPIRY_DAYS: "30"
-      # REMEMBER_READ_POSITION: "true"
       # PORT: "8080"
     volumes:
-      - anus-cache:/data/cache
+      - anus-data:/data
 
 volumes:
-  anus-cache:
+  anus-data:
