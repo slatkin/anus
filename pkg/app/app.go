@@ -75,6 +75,19 @@ type FetchResult struct {
 
 // ── methods ───────────────────────────────────────────────────────────────
 
+// FetchCached returns whatever is in the local cache without hitting the network.
+func (a *App) FetchCached() (*FetchResult, error) {
+	if a.cache == nil {
+		return &FetchResult{RememberReadPosition: a.rememberReadPosition}, nil
+	}
+	cached, err := a.cache.All()
+	if err != nil {
+		return nil, err
+	}
+	sortByDate(cached)
+	return &FetchResult{Entries: cached, Feeds: buildFeedList(cached), RememberReadPosition: a.rememberReadPosition}, nil
+}
+
 func (a *App) FetchEntries() (*FetchResult, error) {
 	const pageSize = 100
 	var fresh []miniflux.FeedEntry

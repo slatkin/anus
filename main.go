@@ -16,11 +16,13 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/linux"
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type App struct {
 	*app.App
 	cfg config.Config
+	ctx context.Context
 }
 
 func newApp(cfg config.Config) *App {
@@ -31,7 +33,12 @@ func newApp(cfg config.Config) *App {
 	}
 }
 
-func (a *App) startup(_ context.Context) {
+func (a *App) Show() {
+	wailsruntime.WindowShow(a.ctx)
+}
+
+func (a *App) startup(ctx context.Context) {
+	a.ctx = ctx
 	dir := a.cfg.CacheDir
 	if dir == "" {
 		var err error
@@ -84,6 +91,7 @@ func main() {
 			Assets: frontend.FS,
 		},
 		BackgroundColour:         &options.RGBA{R: 0, G: 0, B: 0, A: 0},
+		StartHidden:              true,
 		EnableDefaultContextMenu: true,
 		OnStartup:                a.startup,
 		OnShutdown:               a.shutdown,

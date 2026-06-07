@@ -54,6 +54,15 @@ func main() {
 }
 
 func registerAPI(mux *http.ServeMux, a *app.App) {
+	mux.HandleFunc("GET /api/cached", func(w http.ResponseWriter, r *http.Request) {
+		result, err := a.FetchCached()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, result)
+	})
+
 	mux.HandleFunc("GET /api/entries", func(w http.ResponseWriter, r *http.Request) {
 		result, err := a.FetchEntries()
 		if err != nil {

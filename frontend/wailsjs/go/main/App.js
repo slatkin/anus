@@ -10,6 +10,10 @@ export function FetchArticleContent(arg1, arg2) {
   return window['go']['main']['App']['FetchArticleContent'](arg1, arg2);
 }
 
+export function FetchCached() {
+  return window['go']['main']['App']['FetchCached']();
+}
+
 export function FetchEntries() {
   return window['go']['main']['App']['FetchEntries']();
 }
@@ -36,6 +40,10 @@ export function RefreshAndFetch() {
 
 export function SaveEntry(arg1) {
   return window['go']['main']['App']['SaveEntry'](arg1);
+}
+
+export function Show() {
+  return window['go']['main']['App']['Show']();
 }
 
 export function ToggleStar(arg1) {

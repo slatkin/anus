@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy, tick } from 'svelte';
   import { fade, fly } from 'svelte/transition';
-  import { FetchEntries, RefreshAndFetch, FetchArticleContent, MarkRead, MarkUnread, ToggleStar, SaveEntry, OpenURL } from './api.js';
+  import { FetchCached, FetchEntries, RefreshAndFetch, FetchArticleContent, MarkRead, MarkUnread, ToggleStar, SaveEntry, OpenURL, Show } from './api.js';
   import { BookOpen, Bookmark, ExternalLink, EyeOff, Minus, Plus } from 'lucide-svelte';
   import { COL_PAD, COL_GAP, COL_PAD_TOP, COL_PAD_BOT, calcCols, calcColWidth, calcContentWidth, calcPageStride, calcTotalPages } from './paging.js';
 
@@ -168,8 +168,11 @@
     if (synced !== -1 && synced !== cursor) cursor = synced;
   }
 
-  onMount(() => {
-    fetchEntries();
+  onMount(async () => {
+    await loadCached();
+    await tick();
+    Show();
+    fetchEntries(true);
     const poll  = setInterval(() => fetchEntries(true), 10 * 60 * 1000);
     const clock = setInterval(() => { now = Date.now(); }, 60 * 1000);
     return () => { clearInterval(poll); clearInterval(clock); };
@@ -180,6 +183,25 @@
   });
 
   // ── data ──────────────────────────────────────────────────────────
+
+  async function loadCached() {
+    try {
+      const result = await FetchCached();
+      if (!result.entries?.length) return;
+      allEntries = result.entries;
+      feeds      = result.feeds ?? [];
+      entries    = filterByFeed(allEntries, filterFeedID);
+      loading    = false;
+      refreshStatus();
+      await tick();
+      const rememberPos = result.remember_read_position ?? true;
+      const savedId     = rememberPos ? parseInt(localStorage.getItem('lastArticleId') || '0', 10) : 0;
+      const savedIdx    = savedId ? displayEntries.findIndex(e => e.id === savedId) : -1;
+      openArticle(savedIdx !== -1 ? savedIdx : 0);
+    } catch (_) {
+      // cache unavailable — fall through to live fetch
+    }
+  }
 
   async function fetchEntries(background = false, doServerRefresh = false) {
     const prevIds    = new Set(allEntries.map(e => e.id));
@@ -1385,34 +1407,6 @@
     text-align: center;
     margin-top: 5px;
     line-height: 1.4;
-  }
-
-  /* ── sticky title (pages 2+) ── */
-  .sticky-title {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    background: #fdf6e3;
-    z-index: 5;
-  }
-
-  .sticky-title-text {
-    position: absolute;
-    left: 0;
-    right: 0;
-    font-size: 12px;
-    font-weight: 300;
-    color: #9a7a58;
-    padding-left: 48px;
-    margin: 0;
-  }
-
-  .sticky-title-hr {
-    position: absolute;
-    border: none;
-    border-top: 1px solid #dac8a8;
-    margin: 0;
   }
 
   /* ── toast ── */
