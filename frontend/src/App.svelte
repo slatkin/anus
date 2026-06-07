@@ -808,18 +808,20 @@
       <div class="toolbar toolbar-nav" class:nav-collapsed={navCollapsed}>
         <div class="nav-left">
           <div class="collapse-btn-wrap">
-            <button class="nav-arrow-btn nav-collapse-btn" class:flipped={navCollapsed}
+            <button class="nav-arrow-btn nav-collapse-btn"
                     on:click={toggleNav}
                     title={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
-              <div class="flip-front">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                  <path d="M11.92,19.92L4,12l7.92-7.92l1.41,1.42L7.83,11H22v2H7.83l5.5,5.5L11.92,19.92M4,12V4H2v16h2V12z"/>
-                </svg>
-              </div>
-              <div class="flip-back">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style="transform: scaleX(-1)">
-                  <path d="M11.92,19.92L4,12l7.92-7.92l1.41,1.42L7.83,11H22v2H7.83l5.5,5.5L11.92,19.92M4,12V4H2v16h2V12z"/>
-                </svg>
+              <div class="flip-icon" class:flipped={navCollapsed}>
+                <div class="flip-front">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                    <path d="M11.92,19.92L4,12l7.92-7.92l1.41,1.42L7.83,11H22v2H7.83l5.5,5.5L11.92,19.92M4,12V4H2v16h2V12z"/>
+                  </svg>
+                </div>
+                <div class="flip-back">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style="transform: scaleX(-1)">
+                    <path d="M11.92,19.92L4,12l7.92-7.92l1.41,1.42L7.83,11H22v2H7.83l5.5,5.5L11.92,19.92M4,12V4H2v16h2V12z"/>
+                  </svg>
+                </div>
               </div>
             </button>
           </div>
@@ -1020,7 +1022,7 @@
 
   .toolbar {
     display: flex;
-    align-items: center;
+    align-items: stretch;
     justify-content: space-between;
     padding: 6px 14px;
     background: #24283b;
@@ -1056,13 +1058,13 @@
     align-items: center;
     justify-content: space-between;
     padding-right: 4px;
+    position: relative;
+    height: 38px;
   }
 
-  .nav-left { display: flex; gap: 2px; align-items: center; }
+  .nav-left { display: flex; gap: 2px; align-items: stretch; }
   .nav-ud-btns { display: flex; gap: 2px; }
 
-  .toolbar-nav.nav-collapsed { align-items: center; justify-content: center; }
-  .toolbar-nav.nav-collapsed .nav-left { justify-content: center; }
 
   .nav-arrow-btn {
     background: none;
@@ -1077,16 +1079,22 @@
     transition: background 80ms, color 80ms, transform 80ms;
   }
   .nav-arrow-btn:hover  { background: #24283b; color: #c0caf5; }
-  .nav-arrow-btn:active { background: #414868; color: #c0caf5; transform: scale(0.88); }
-  .collapse-btn-wrap { perspective: 200px; }
+  .nav-arrow-btn:active { background: #414868; color: #c0caf5; }
+  .collapse-btn-wrap { position: absolute; left: 0; top: 0; bottom: 0; display: flex; }
   .nav-collapse-btn {
     display: flex; align-items: center; justify-content: center;
-    padding: 2px 5px; background: #2d3f76; color: #7aa2f7;
-    position: relative; transform-style: preserve-3d;
-    transition: transform 280ms cubic-bezier(0.4, 0, 0.2, 1), background 80ms, color 80ms;
+    padding: 2px 14px; background: #2d3f76; color: #7aa2f7;
+    border-radius: 0;
   }
-  .nav-collapse-btn.flipped { transform: rotateY(180deg); }
   .nav-collapse-btn:hover { background: #3d59a1 !important; color: #c0caf5 !important; }
+  .flip-icon {
+    perspective: 200px;
+    position: relative; width: 16px; height: 16px;
+    transform-style: preserve-3d;
+    transition: transform 280ms cubic-bezier(0.4, 0, 0.2, 1);
+    top: 2px;
+  }
+  .flip-icon.flipped { transform: rotateY(180deg); }
   .flip-front, .flip-back { backface-visibility: hidden; display: flex; align-items: center; justify-content: center; }
   .flip-back { position: absolute; inset: 0; transform: rotateY(180deg); display: flex; align-items: center; justify-content: center; }
 
