@@ -906,6 +906,13 @@
         </button>
       </div>
 
+      {#if navCollapsed}
+        <div class="collapsed-nav-btns">
+          <button class="nav-arrow-btn" on:click={moveUp}   title="Previous (↑)">↑</button>
+          <button class="nav-arrow-btn" on:click={moveDown} title="Next (↓)">↓</button>
+        </div>
+      {/if}
+
   </div><!-- /left-col -->
 
     <div class="splitter" role="separator" aria-label="Resize navigation panel" tabindex="0" class:hidden={navCollapsed} class:web={import.meta.env.VITE_API !== 'wails'} on:mousedown={startNavResize} on:keydown={e => (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && startNavResize(e)}></div>
@@ -998,6 +1005,7 @@
 
 <style>
   :global(*, *::before, *::after) { box-sizing: border-box; margin: 0; padding: 0; }
+  :global(*:focus) { outline: none; }
 
   :global(html, body) {
     height: 100%;
@@ -1064,6 +1072,15 @@
 
   .nav-left { display: flex; gap: 2px; align-items: stretch; }
   .nav-ud-btns { display: flex; gap: 2px; }
+  .collapsed-nav-btns {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
 
 
   .nav-arrow-btn {
