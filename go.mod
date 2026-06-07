@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	codeberg.org/readeck/go-readability/v2 v2.1.1
-	github.com/BurntSushi/toml v1.5.0
+	github.com/BurntSushi/toml v1.6.0
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/wailsapp/wails/v2 v2.12.0
 	go.etcd.io/bbolt v1.4.3
