@@ -826,16 +826,7 @@
             </button>
           </div>
         </div>
-        {#if !navCollapsed}
-          <div class="mark-all-group">
-            <button class="mark-all-btn" on:click={markAllRead}>mark all read</button>
-            <span class="toolbar-sep"></span>
-            <button class="toolbar-btn" on:click={() => fetchEntries(false, true)} title="Refresh (r)">↺</button>
-          </div>
-        {/if}
-      </div>
-      <div class="toolbar toolbar-filters nav-collapsible">
-        <div class="toolbar-toggles">
+        <div class="toolbar-toggles nav-collapsible">
           <button class="pill" class:active={grouped}    on:click={() => grouped    = !grouped}    title="Group by feed">group feeds</button>
           <button class="pill" class:active={showRead}   on:click={() => showRead   = !showRead}   title="Show or hide read articles">show read</button>
           <button class="pill" class:active={sortOldest} on:click={() => sortOldest = !sortOldest} title="Sort oldest first">oldest first</button>
@@ -901,9 +892,15 @@
           <button class="nav-arrow-btn" on:click={moveDown} title="Next (↓)">↓</button>
         </div>
         <div class="nav-bottom-spacer"></div>
-        <button class="nav-arrow-btn" on:click={openSettings} title="Settings">
-          <Settings size={14}/>
-        </button>
+        <div class="nav-bottom-right">
+          <button class="mark-all-btn" on:click={markAllRead}>mark all read</button>
+          <span class="toolbar-sep"></span>
+          <button class="toolbar-btn" on:click={() => fetchEntries(false, true)} title="Refresh (r)">↺</button>
+          <span class="toolbar-sep"></span>
+          <button class="nav-arrow-btn" on:click={openSettings} title="Settings" style="position:relative;top:2px">
+            <Settings size={14}/>
+          </button>
+        </div>
       </div>
 
       {#if navCollapsed}
@@ -1041,18 +1038,20 @@
   .toolbar-toggles {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 0;
+    position: relative;
+    top: 1px;
   }
 
   .pill {
-    padding: 2px 7px;
+    padding: 2px 4px;
     border-radius: 4px;
     border: none;
     background: transparent;
     color: #737aa2;
     font-family: inherit;
     font-size: 11px;
-    font-weight: 300;
+    font-weight: 400;
     cursor: pointer;
     letter-spacing: 0.02em;
     transition: background 120ms, color 120ms, transform 80ms;
@@ -1100,10 +1099,10 @@
   .collapse-btn-wrap { position: absolute; left: 0; top: 0; bottom: 0; display: flex; }
   .nav-collapse-btn {
     display: flex; align-items: center; justify-content: center;
-    padding: 2px 14px; background: #2d3f76; color: #7aa2f7;
+    padding: 2px 14px; background: #24283b; color: #7aa2f7;
     border-radius: 0;
   }
-  .nav-collapse-btn:hover { background: #3d59a1 !important; color: #c0caf5 !important; }
+  .nav-collapse-btn:hover { background: #24283b !important; }
   .flip-icon {
     perspective: 200px;
     position: relative; width: 16px; height: 16px;
@@ -1131,11 +1130,6 @@
   .mark-all-btn:hover  { color: #f7768e; }
   .mark-all-btn:active { color: #f7768e; transform: scale(0.92); }
 
-  .mark-all-group {
-    display: flex;
-    align-items: center;
-    gap: 0;
-  }
 
   .toolbar-sep {
     display: inline-block;
@@ -1231,6 +1225,7 @@
     border-radius: 4px;
     cursor: pointer;
     user-select: none;
+    right: 2px;
   }
 
   .nav-feed-header {
@@ -1597,10 +1592,12 @@
     border-top: 1px solid #414868;
     border-bottom: none;
     justify-content: flex-end;
+    align-items: center;
     padding: 6px 4px;
   }
 
   .nav-bottom-spacer { flex: 1; }
+  .nav-bottom-right { display: flex; align-items: center; gap: 0; }
 
   .settings-backdrop {
     position: fixed;
