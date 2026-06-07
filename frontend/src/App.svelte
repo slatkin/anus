@@ -2,7 +2,7 @@
   import { onMount, onDestroy, tick } from 'svelte';
   import { fade, fly } from 'svelte/transition';
   import { FetchCached, FetchEntries, RefreshAndFetch, FetchArticleContent, MarkRead, MarkUnread, ToggleStar, SaveEntry, OpenURL, Show, GetConfig, SaveConfig } from './api.js';
-  import { BookOpen, Bookmark, ExternalLink, EyeOff, Minus, Plus, Settings } from 'lucide-svelte';
+  import { BookOpen, Bookmark, ChevronsDownUp, ChevronsUpDown, ExternalLink, EyeOff, Minus, Plus, Settings } from 'lucide-svelte';
   import { COL_PAD, COL_GAP, COL_PAD_TOP, COL_PAD_BOT, calcCols, calcColWidth, calcContentWidth, calcPageStride, calcTotalPages } from './paging.js';
 
   const MODE_ENTRIES = 'entries';
@@ -53,16 +53,22 @@
   let showRead      = localStorage.getItem('showRead')      !== 'false';
   let sortOldest    = localStorage.getItem('sortOldest')    === 'true';
   let grouped       = localStorage.getItem('grouped')       !== 'false';
+  let groupedCats   = localStorage.getItem('groupedCats')   === 'true';
   let showScrollbar = localStorage.getItem('showScrollbar') === 'true';
   let navPaneEl = null;
   let thumbTop = 0;
   let thumbHeight = 0;
+  let stickyOffset = 0;
 
   function updateScrollThumb() {
     if (!navPaneEl) return;
     const { scrollTop, scrollHeight, clientHeight } = navPaneEl;
-    thumbHeight = Math.max(30, (clientHeight / scrollHeight) * (clientHeight - 4));
-    thumbTop = 2 + (scrollTop / (scrollHeight - clientHeight)) * (clientHeight - thumbHeight - 4);
+    const header = navPaneEl.querySelector('.nav-feed-header');
+    stickyOffset = header ? header.offsetHeight : 0;
+    const trackTop = stickyOffset + 2;
+    const trackH = clientHeight - trackTop - 2;
+    thumbHeight = Math.max(30, (clientHeight / scrollHeight) * trackH);
+    thumbTop = trackTop + (scrollTop / (scrollHeight - clientHeight)) * (trackH - thumbHeight);
   }
 
   function onThumbMousedown(e) {
@@ -86,6 +92,7 @@
   $: localStorage.setItem('showRead',      String(showRead));
   $: localStorage.setItem('sortOldest',    String(sortOldest));
   $: localStorage.setItem('grouped',       String(grouped));
+  $: localStorage.setItem('groupedCats',   String(groupedCats));
   $: localStorage.setItem('showScrollbar', String(showScrollbar));
   $: localStorage.setItem('collapsedFeeds', JSON.stringify([...collapsedFeeds]));
   let navWidth     = parseInt(localStorage.getItem('navWidth') || '300', 10);
@@ -475,10 +482,42 @@
     MarkRead(ids).catch(() => {});
   }
 
-  function toggleFeedCollapse(feedId) {
-    if (collapsedFeeds.has(feedId)) collapsedFeeds.delete(feedId);
-    else collapsedFeeds.add(feedId);
-    collapsedFeeds = collapsedFeeds;
+  function markCatRead(catTitle) {
+    const ids = entries.filter(e => (e.feed.category?.title || 'All') === catTitle && e.status === 'unread' && !keptUnread.has(e.id)).map(e => e.id);
+    if (!ids.length) return;
+    const idSet = new Set(ids);
+    entries    = entries.map(e => idSet.has(e.id) ? { ...e, status: 'read' } : e);
+    allEntries = allEntries.map(e => idSet.has(e.id) ? { ...e, status: 'read' } : e);
+    MarkRead(ids).catch(() => {});
+  }
+
+  async function toggleFeedCollapse(feedId) {
+    const isCollapsing = !collapsedFeeds.has(feedId);
+
+    if (isCollapsing) {
+      const headerIdx = displayItems.findIndex(i => i.type === 'header' && i.feedId === feedId);
+      let nextCursorIdx = null;
+      if (headerIdx !== -1) {
+        let pastThisGroup = false;
+        for (let i = headerIdx + 1; i < displayItems.length; i++) {
+          const item = displayItems[i];
+          if (item.type === 'header') { pastThisGroup = true; continue; }
+          if (item.type === 'item' && pastThisGroup) { nextCursorIdx = item.cursorIdx; break; }
+        }
+      }
+
+      collapsedFeeds.add(feedId);
+      collapsedFeeds = collapsedFeeds;
+
+      if (nextCursorIdx !== null) {
+        await tick();
+        await new Promise(r => requestAnimationFrame(r));
+        itemEls[nextCursorIdx]?.scrollIntoView({ block: 'start' });
+      }
+    } else {
+      collapsedFeeds.delete(feedId);
+      collapsedFeeds = collapsedFeeds;
+    }
   }
 
   function saveEntry() {
@@ -746,7 +785,31 @@
     for (const feedId of order) {
       const { title, rows } = byFeed.get(feedId);
       const collapsed = collapsedFeeds.has(feedId);
-      out.push({ type: 'header', title, feedId, collapsed });
+      out.push({ type: 'header', title, feedId, collapsed, count: rows.length });
+      if (!collapsed) out.push(...rows);
+    }
+    return out;
+  }
+
+  function buildGroupedCatItems(entries) {
+    const byCat = new Map();
+    const order = [];
+    entries.forEach((e, idx) => {
+      const catTitle = e.feed.category?.title || 'All';
+      const key = catTitle;
+      if (!byCat.has(key)) { byCat.set(key, { title: catTitle, rows: [] }); order.push(key); }
+      byCat.get(key).rows.push({
+        type: 'item', cursorIdx: idx, id: e.id, title: e.title,
+        sub:  (e.starred ? '★  ' : '') + e.feed.title + '  ·  ' + timeAgo(e.published_at),
+        unread: e.status === 'unread',
+      });
+    });
+    order.sort((a, b) => a.localeCompare(b));
+    const out = [];
+    for (const key of order) {
+      const { title, rows } = byCat.get(key);
+      const collapsed = collapsedFeeds.has(key);
+      out.push({ type: 'header', title, feedId: key, collapsed, count: rows.length });
       if (!collapsed) out.push(...rows);
     }
     return out;
@@ -764,6 +827,8 @@
       }))
     : grouped
       ? buildGroupedItems(displayEntries)
+      : groupedCats
+      ? buildGroupedCatItems(displayEntries)
       : displayEntries.map((e, idx) => ({
           type:      'item',
           cursorIdx: idx,
@@ -832,11 +897,19 @@
           </div>
         </div>
         <div class="toolbar-toggles nav-collapsible">
-          <button class="pill" class:active={grouped}    on:click={() => grouped    = !grouped}    title="Group by feed">group feeds</button>
-          <button class="pill" class:active={showRead}   on:click={() => showRead   = !showRead}   title="Show or hide read articles">show read</button>
-          <button class="pill" class:active={sortOldest} on:click={() => sortOldest = !sortOldest} title="Sort oldest first">oldest first</button>
+          <button class="pill" class:active={showRead}   on:click={() => showRead   = !showRead}   title="Show or hide read articles">all</button>
+          <button class="pill" class:active={sortOldest} on:click={() => sortOldest = !sortOldest} title="Sort oldest first">oldest</button>
+          <span class="pill-label">Group:</span>
+          <button class="pill" class:active={groupedCats} on:click={() => { groupedCats = !groupedCats; if (groupedCats) grouped = false; }} title="Group by category">tags</button>
+          <button class="pill" class:active={grouped}    on:click={() => { grouped = !grouped; if (grouped) groupedCats = false; }}    title="Group by feed">feeds</button>
         </div>
       </div>
+
+      {#if (grouped || groupedCats) && !navCollapsed}
+        <div class="group-actions-bar">
+          <button class="pill" style="padding-right:0;gap:3px;display:flex;align-items:center" on:click={() => { collapsedFeeds = new Set(displayItems.filter(i => i.type === 'header').map(i => i.feedId)); }} title="Collapse all"><span style="position:relative;top:1px;display:flex"><ChevronsDownUp size={12}/></span>collapse</button><span style="color:#414868;font-size:11px;position:relative;top:-1px">/</span><button class="pill" style="padding-left:0;gap:3px;display:flex;align-items:center" on:click={() => { collapsedFeeds = new Set(); }} title="Expand all"><span style="position:relative;top:1px;display:flex"><ChevronsUpDown size={12}/></span>expand</button>
+        </div>
+      {/if}
 
       <div class="nav-pane-wrap nav-collapsible">
       <div class="nav-pane" class:window-focused={windowFocused} bind:this={navPaneEl} on:scroll={updateScrollThumb}>
@@ -850,12 +923,11 @@
         {#each displayItems as item}
           {#if item.type === 'header'}
             <div class="nav-feed-header" role="button" tabindex="0"
+              data-feed-id={item.feedId}
               on:dblclick={() => toggleFeedCollapse(item.feedId)}
               on:keydown={e => e.key === 'Enter' && toggleFeedCollapse(item.feedId)}>
               <span class="feed-header-title">{item.title}</span>
-              {#if grouped && !item.collapsed}
-                <button class="feed-mark-read" on:click|stopPropagation={() => markFeedRead(item.feedId)}>Mark read</button>
-              {/if}
+              {#if item.count != null}<span class="feed-header-count">{item.count}</span>{/if}
             </div>
           {:else}
             <div
@@ -926,7 +998,7 @@
                bind:this={contentEl}
                style="width: {contentWidth}px; column-width: {colWidth}px; column-gap: {COL_GAP}px; padding: {COL_PAD_TOP}px {COL_PAD}px {COL_PAD_BOT}px; height: 100%; transform: translateX(-{page * pageStride}px)">
             <h1 class="article-title">{selectedEntry.title}</h1>
-            <div class="article-meta">{selectedEntry.feed.title}  ·  {fullDate(selectedEntry.published_at)}{selectedEntry.fetched_at ? '  ·  Fetched ' + timeAgo(selectedEntry.fetched_at) : ''}</div>
+            <div class="article-meta">{selectedEntry.feed.title}{selectedEntry.feed.category?.title && selectedEntry.feed.category.title !== 'All' ? '  ·  ' + selectedEntry.feed.category.title : ''}  ·  {fullDate(selectedEntry.published_at)}{selectedEntry.fetched_at ? '  ·  Fetched ' + timeAgo(selectedEntry.fetched_at) : ''}</div>
             <div class="reader-controls">
               <button class="ctrl-btn" class:active={originalContent !== null} on:click={fetchOriginal} title="Readability mode">
                 <BookOpen size={14}/>
@@ -1040,10 +1112,16 @@
     flex-shrink: 0;
   }
 
+  .pill-label {
+    font-size: 11px;
+    color: #414868;
+    padding: 0 2px 0 6px;
+    user-select: none;
+  }
   .toolbar-toggles {
     display: flex;
     align-items: center;
-    gap: 0;
+    gap: 2px;
     position: relative;
     top: 1px;
   }
@@ -1219,7 +1297,7 @@
     top: 0;
     bottom: 0;
     width: 4px;
-    background: #1a1b26;
+    background: transparent;
     z-index: 10;
     flex-shrink: 0;
   }
@@ -1245,6 +1323,7 @@
     color: #7aa2f7;
     background: #24283b;
     border-bottom: 1px solid #414868;
+
     position: sticky;
     top: 0;
     z-index: 1;
@@ -1255,6 +1334,19 @@
   .feed-header-title {
     min-width: 0;
     flex: 1;
+  }
+
+  .feed-header-count {
+    font-size: 10px;
+    color: #414868;
+    margin-left: 6px;
+    flex-shrink: 0;
+  }
+  .feed-header-sep {
+    font-size: 10px;
+    color: #414868;
+    margin-left: 6px;
+    flex-shrink: 0;
   }
 
   .feed-mark-read {
@@ -1602,6 +1694,15 @@
   }
 
   .nav-bottom-spacer { flex: 1; }
+  .group-actions-bar {
+    background: #1a1b26;
+    border-bottom: 1px solid #414868;
+    padding: 2px 4px 2px 8px;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+  }
   .nav-bottom-right { display: flex; align-items: center; gap: 0; }
 
   .settings-backdrop {

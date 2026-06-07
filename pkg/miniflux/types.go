@@ -16,11 +16,17 @@ func (r ReadStatus) Toggle() ReadStatus {
 	return ReadStatusRead
 }
 
+type Category struct {
+	ID    int    `json:"id"`
+	Title string `json:"title"`
+}
+
 type Feed struct {
-	ID      int    `json:"id"`
-	Title   string `json:"title"`
-	SiteURL string `json:"site_url"`
-	FeedURL string `json:"feed_url"`
+	ID       int      `json:"id"`
+	Title    string   `json:"title"`
+	SiteURL  string   `json:"site_url"`
+	FeedURL  string   `json:"feed_url"`
+	Category Category `json:"category"`
 }
 
 type FeedEntry struct {
