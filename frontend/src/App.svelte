@@ -57,12 +57,16 @@
   let navPaneEl = null;
   let thumbTop = 0;
   let thumbHeight = 0;
+  let thumbAtTop = true;
+  let thumbAtBottom = false;
 
   function updateScrollThumb() {
     if (!navPaneEl) return;
     const { scrollTop, scrollHeight, clientHeight } = navPaneEl;
     thumbHeight = Math.max(30, (clientHeight / scrollHeight) * clientHeight);
     thumbTop = (scrollTop / (scrollHeight - clientHeight)) * (clientHeight - thumbHeight);
+    thumbAtTop = thumbTop <= 0;
+    thumbAtBottom = thumbTop + thumbHeight >= clientHeight;
   }
 
   function onThumbMousedown(e) {
@@ -882,7 +886,7 @@
             aria-valuemin={0}
             aria-valuemax={100}
             tabindex="0"
-            style="top:{thumbTop}px; height:{thumbHeight}px"
+            style="top:{thumbTop}px; height:{thumbHeight}px; border-radius: {thumbAtTop ? '0' : '4px'} {thumbAtTop ? '0' : '4px'} {thumbAtBottom ? '0' : '4px'} {thumbAtBottom ? '0' : '4px'}"
             on:mousedown={onThumbMousedown}>
           </div>
         </div>
@@ -1198,7 +1202,7 @@
   .custom-scrollbar-thumb {
     position: absolute;
     width: 4px;
-    background: #c0caf5;
+    background: #414868;
     border-radius: 4px;
     cursor: pointer;
     user-select: none;
