@@ -5,7 +5,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 const apiMode = process.env.VITE_API ?? 'web'
 
 export default defineConfig({
-  plugins: [svelte()],
+  plugins: [svelte({ onwarn: (warning, handler) => { if (warning.code.startsWith('a11y-')) return; handler(warning); } })],
   test: {
     environment: 'node',
   },

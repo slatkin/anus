@@ -13,7 +13,7 @@ build-web: frontend-web
 	go build -tags production -o $(OUTDIR)/$(BIN_WEB) ./cmd/anus-web
 
 dev-ui:
-	VITE_API=wails wails dev -tags $(TAGS)
+	VITE_API=wails wails dev -tags $(TAGS) 2>&1 | grep -v 'Overriding existing handler for signal'
 
 dev-docker:
 	@CONFIG=~/.config/anus/config.toml; \

@@ -6,6 +6,8 @@ export function Close():Promise<void>;
 
 export function FetchArticleContent(arg1:number,arg2:string):Promise<string>;
 
+export function FetchCached():Promise<app.FetchResult>;
+
 export function FetchEntries():Promise<app.FetchResult>;
 
 export function MarkRead(arg1:Array<number>):Promise<void>;
@@ -19,5 +21,7 @@ export function OpenURL(arg1:string):Promise<void>;
 export function RefreshAndFetch():Promise<app.FetchResult>;
 
 export function SaveEntry(arg1:number):Promise<void>;
+
+export function Show():Promise<void>;
 
 export function ToggleStar(arg1:number):Promise<void>;

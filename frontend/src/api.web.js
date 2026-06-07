@@ -7,6 +7,12 @@ async function post(path, body) {
   if (!res.ok) throw new Error(await res.text());
 }
 
+export async function FetchCached() {
+  const res = await fetch('/api/cached');
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export async function FetchEntries() {
   const res = await fetch('/api/entries');
   if (!res.ok) throw new Error(await res.text());
@@ -45,3 +51,5 @@ export async function SaveEntry(id) {
 export function OpenURL(url) {
   window.open(url, '_blank', 'noopener,noreferrer');
 }
+
+export function Show() {}
