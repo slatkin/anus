@@ -30,27 +30,24 @@ docker run -d \
   ghcr.io/slatkin/anus-web:latest
 ```
 
-Or with `docker compose`:
+Or with `docker compose` (copy `docker-compose.yml.sample` to `docker-compose.yml` and fill in your credentials):
 
 ```yaml
 services:
   anus-web:
     image: ghcr.io/slatkin/anus-web:latest
+    restart: unless-stopped
     ports:
       - "8080:8080"
     environment:
-      MINIFLUX_URL: "https://your-miniflux-instance"
-      MINIFLUX_API_KEY: "your-api-key"
-      CACHE_DIR: /data/cache
-      # ALLOW_INVALID_CERTS: "false"
-      # CACHE_EXPIRY_DAYS: "30"
-      # REMEMBER_READ_POSITION: "true"
-      # PORT: "8080"
+      MINIFLUX_URL: https://your-miniflux-instance
+      MINIFLUX_API_KEY: your-api-key
+      ALLOW_INVALID_CERTS: false
+      CACHE_EXPIRY_DAYS: 30
+      REMEMBER_READ_POSITION: true
+      CACHE_DIR: /data
     volumes:
-      - anus-cache:/data/cache
-
-volumes:
-  anus-cache:
+      - /docker/anus:/data
 ```
 
 ```bash
@@ -128,9 +125,10 @@ remember_read_position = true
 | Key | Action |
 |-----|--------|
 | `↑` / `↓` | Previous / next article |
+| `Home` / `End` | Jump to first / last article |
 | `Enter` | Open selected article |
-| `→` / `PageDown` | Next page; at last page, advance to next article |
-| `←` / `PageUp` | Previous page; at first page, go to previous article |
+| `→` | Next page in reader |
+| `←` | Previous page in reader |
 | `b` / `Esc` / `Backspace` | Back (reader → list → feeds) |
 | `f` | Switch to feed list |
 
