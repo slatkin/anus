@@ -120,10 +120,6 @@ func (a *App) FetchEntries() (*FetchResult, error) {
 		return &FetchResult{Entries: cached, Feeds: buildFeedList(cached), RememberReadPosition: a.rememberReadPosition}, nil
 	}
 
-	if a.cache != nil {
-		_ = a.cache.Put(fresh)
-	}
-
 	merged := make([]miniflux.FeedEntry, len(fresh))
 	copy(merged, fresh)
 	if a.cache != nil {
@@ -136,11 +132,15 @@ func (a *App) FetchEntries() (*FetchResult, error) {
 		for _, e := range cached {
 			fetchedAtMap[e.ID] = e.FetchedAt
 		}
+		now := time.Now()
 		for i := range merged {
 			if t, ok := fetchedAtMap[merged[i].ID]; ok {
 				merged[i].FetchedAt = t
+			} else {
+				merged[i].FetchedAt = now
 			}
 		}
+		_ = a.cache.Put(merged[:len(fresh)])
 		for _, e := range cached {
 			if !freshSet[e.ID] {
 				merged = append(merged, e)

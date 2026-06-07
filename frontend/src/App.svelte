@@ -253,6 +253,26 @@
     }
   }
 
+  function moveFirst() {
+    if (mode === MODE_FEEDS) {
+      feedCursor = 0; cursor = 0;
+      scrollCursorIntoView(); refreshStatus();
+    } else {
+      const items = navOrder();
+      if (items.length > 0) openArticle(items[0].cursorIdx);
+    }
+  }
+
+  function moveLast() {
+    if (mode === MODE_FEEDS) {
+      feedCursor = feeds.length - 1; cursor = feedCursor;
+      scrollCursorIntoView(); refreshStatus();
+    } else {
+      const items = navOrder();
+      if (items.length > 0) openArticle(items[items.length - 1].cursorIdx);
+    }
+  }
+
   function advanceToNextUnread() {
     const items = navOrder();
     const pos = items.findIndex(item => item.cursorIdx === cursor);
@@ -486,11 +506,11 @@
       case 'x': fetchOriginal(); break;
       case 'r': fetchEntries(false, true); break;
       case ' ':        e.preventDefault(); markReadAndAdvance(); break;
-      case 'PageDown':
+      case 'Home':     e.preventDefault(); moveFirst(); break;
+      case 'End':      e.preventDefault(); moveLast();  break;
       case 'ArrowRight': e.preventDefault();
         if (page < totalPages - 1) page++;
         break;
-      case 'PageUp':
       case 'ArrowLeft':  e.preventDefault();
         if (page > 0) page--;
         break;
@@ -701,29 +721,41 @@
 
       <div class="toolbar toolbar-nav" class:nav-collapsed={navCollapsed}>
         <div class="nav-left">
-          <button class="nav-arrow-btn nav-collapse-btn" on:click={toggleNav}
-                  title={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
-            <svg class="collapse-icon" class:flipped={navCollapsed}
-                 viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-              <path d="M11.92,19.92L4,12l7.92-7.92l1.41,1.42L7.83,11H22v2H7.83l5.5,5.5L11.92,19.92M4,12V4H2v16h2V12z"/>
-            </svg>
-          </button>
+          <div class="collapse-btn-wrap">
+            <button class="nav-arrow-btn nav-collapse-btn" class:flipped={navCollapsed}
+                    on:click={toggleNav}
+                    title={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+              <div class="flip-front">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                  <path d="M11.92,19.92L4,12l7.92-7.92l1.41,1.42L7.83,11H22v2H7.83l5.5,5.5L11.92,19.92M4,12V4H2v16h2V12z"/>
+                </svg>
+              </div>
+              <div class="flip-back">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style="transform: scaleX(-1)">
+                  <path d="M11.92,19.92L4,12l7.92-7.92l1.41,1.42L7.83,11H22v2H7.83l5.5,5.5L11.92,19.92M4,12V4H2v16h2V12z"/>
+                </svg>
+              </div>
+            </button>
+          </div>
           <div class="nav-ud-btns">
             <button class="nav-arrow-btn" on:click={moveUp}   title="Previous (↑)">↑</button>
             <button class="nav-arrow-btn" on:click={moveDown} title="Next (↓)">↓</button>
           </div>
         </div>
         {#if !navCollapsed}
-          <button class="mark-all-btn" on:click={markAllRead}>Mark all read</button>
+          <div class="mark-all-group">
+            <button class="mark-all-btn" on:click={markAllRead}>mark all read</button>
+            <span class="toolbar-sep"></span>
+            <button class="toolbar-btn" on:click={() => fetchEntries(false, true)} title="Refresh (r)">↺</button>
+          </div>
         {/if}
       </div>
       <div class="toolbar toolbar-filters nav-collapsible">
         <div class="toolbar-toggles">
-          <button class="pill" class:active={grouped}    on:click={() => grouped    = !grouped}    title="Group by feed">show feeds</button>
+          <button class="pill" class:active={grouped}    on:click={() => grouped    = !grouped}    title="Group by feed">group feeds</button>
           <button class="pill" class:active={showRead}   on:click={() => showRead   = !showRead}   title="Show or hide read articles">show read</button>
           <button class="pill" class:active={sortOldest} on:click={() => sortOldest = !sortOldest} title="Sort oldest first">oldest first</button>
         </div>
-        <button class="toolbar-btn" on:click={() => fetchEntries(false, true)} title="Refresh (r)">↺</button>
       </div>
 
       <div class="nav-pane nav-collapsible">
@@ -760,7 +792,7 @@
 
   </div><!-- /left-col -->
 
-    <div class="splitter" class:hidden={navCollapsed} on:mousedown={startNavResize}></div>
+    <div class="splitter" class:hidden={navCollapsed} class:web={import.meta.env.VITE_API !== 'wails'} on:mousedown={startNavResize}></div>
 
     <div class="reader-pane" bind:this={readerEl} bind:clientWidth={readerWidth}>
       {#if selectedEntry}
@@ -876,6 +908,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    padding-right: 4px;
   }
 
   .nav-left { display: flex; gap: 2px; align-items: center; }
@@ -906,10 +939,17 @@
   }
   .nav-arrow-btn:hover  { background: #24283b; color: #c0caf5; }
   .nav-arrow-btn:active { background: #414868; color: #c0caf5; transform: scale(0.88); }
-  .nav-collapse-btn { display: flex; align-items: center; justify-content: center; padding: 2px 5px; perspective: 60px; background: #2d3f76; color: #7aa2f7; }
+  .collapse-btn-wrap { perspective: 200px; }
+  .nav-collapse-btn {
+    display: flex; align-items: center; justify-content: center;
+    padding: 2px 5px; background: #2d3f76; color: #7aa2f7;
+    position: relative; transform-style: preserve-3d;
+    transition: transform 280ms cubic-bezier(0.4, 0, 0.2, 1), background 80ms, color 80ms;
+  }
+  .nav-collapse-btn.flipped { transform: rotateY(180deg); }
   .nav-collapse-btn:hover { background: #3d59a1 !important; color: #c0caf5 !important; }
-  .collapse-icon { transition: transform 320ms ease; display: block; }
-  .collapse-icon.flipped { transform: rotateY(180deg); }
+  .flip-front, .flip-back { backface-visibility: hidden; display: flex; align-items: center; justify-content: center; }
+  .flip-back { position: absolute; inset: 0; transform: rotateY(180deg); display: flex; align-items: center; justify-content: center; }
 
   .mark-all-btn {
     background: none;
@@ -926,6 +966,21 @@
   }
   .mark-all-btn:hover  { color: #f7768e; }
   .mark-all-btn:active { color: #f7768e; transform: scale(0.92); }
+
+  .mark-all-group {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+
+  .toolbar-sep {
+    display: inline-block;
+    width: 1px;
+    height: 12px;
+    background: #3b3f5c;
+    margin: 0 2px;
+    vertical-align: middle;
+  }
 
   .toolbar-btn {
     background: none;
@@ -976,6 +1031,7 @@
     background: transparent;
     transition: background 120ms ease;
   }
+  .splitter.web { background: #1a1b26; }
   .splitter:hover, .splitter:active { background: rgba(122, 162, 247, 0.25); }
   .splitter.hidden { width: 0; pointer-events: none; }
 
