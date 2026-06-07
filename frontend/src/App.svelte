@@ -819,10 +819,6 @@
               </div>
             </button>
           </div>
-          <div class="nav-ud-btns">
-            <button class="nav-arrow-btn" on:click={moveUp}   title="Previous (↑)">↑</button>
-            <button class="nav-arrow-btn" on:click={moveDown} title="Next (↓)">↓</button>
-          </div>
         </div>
         {#if !navCollapsed}
           <div class="mark-all-group">
@@ -888,6 +884,10 @@
       </div><!-- /nav-pane-wrap -->
 
       <div class="toolbar toolbar-nav-bottom nav-collapsible">
+        <div class="nav-ud-btns">
+          <button class="nav-arrow-btn" on:click={moveUp}   title="Previous (↑)">↑</button>
+          <button class="nav-arrow-btn" on:click={moveDown} title="Next (↓)">↓</button>
+        </div>
         <div class="nav-bottom-spacer"></div>
         <button class="nav-arrow-btn" on:click={openSettings} title="Settings">
           <Settings size={14}/>
@@ -1053,14 +1053,6 @@
 
   .toolbar-nav.nav-collapsed { align-items: center; justify-content: center; }
   .toolbar-nav.nav-collapsed .nav-left { justify-content: center; }
-  .toolbar-nav.nav-collapsed .nav-ud-btns {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    flex-direction: column;
-    gap: 4px;
-  }
 
   .nav-arrow-btn {
     background: none;
