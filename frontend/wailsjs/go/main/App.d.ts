@@ -3,6 +3,8 @@
 import {app} from '../models';
 import {config} from '../models';
 
+export function ClearCache():Promise<app.FetchResult>;
+
 export function Close():Promise<void>;
 
 export function FetchArticleContent(arg1:number,arg2:string):Promise<string>;

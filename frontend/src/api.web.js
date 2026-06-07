@@ -25,6 +25,12 @@ export async function RefreshAndFetch() {
   return res.json();
 }
 
+export async function ClearCache() {
+  const res = await fetch('/api/clear-cache', { method: 'POST' });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export async function FetchArticleContent(id, url) {
   const res = await fetch(`/api/fetch-content?id=${id}&url=${encodeURIComponent(url)}`);
   if (!res.ok) throw new Error(await res.text());

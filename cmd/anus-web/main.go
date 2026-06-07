@@ -135,6 +135,15 @@ func registerAPI(mux *http.ServeMux, a *app.App, cfg config.Config) {
 		writeJSON(w, result)
 	})
 
+	mux.HandleFunc("POST /api/clear-cache", func(w http.ResponseWriter, r *http.Request) {
+		result, err := a.ClearCache()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		writeJSON(w, result)
+	})
+
 	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, cfg)
 	})

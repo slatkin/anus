@@ -142,4 +142,15 @@ func (c *Cache) Purge() error {
 	})
 }
 
+// Clear deletes all entries from the cache.
+func (c *Cache) Clear() error {
+	return c.db.Update(func(tx *bolt.Tx) error {
+		if err := tx.DeleteBucket(bucket); err != nil {
+			return err
+		}
+		_, err := tx.CreateBucket(bucket)
+		return err
+	})
+}
+
 func key(id int) []byte { return []byte(fmt.Sprintf("%d", id)) }

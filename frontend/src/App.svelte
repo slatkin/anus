@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy, tick } from 'svelte';
   import { fade, fly } from 'svelte/transition';
-  import { FetchCached, FetchEntries, RefreshAndFetch, FetchArticleContent, MarkRead, MarkUnread, ToggleStar, SaveEntry, OpenURL, Show, GetConfig, SaveConfig } from './api.js';
+  import { FetchCached, FetchEntries, RefreshAndFetch, ClearCache, FetchArticleContent, MarkRead, MarkUnread, ToggleStar, SaveEntry, OpenURL, Show, GetConfig, SaveConfig } from './api.js';
   import { BookOpen, Bookmark, ChevronsDownUp, ChevronsUpDown, ExternalLink, EyeOff, Minus, Plus, Settings } from 'lucide-svelte';
   import { COL_PAD, COL_GAP, COL_PAD_TOP, COL_PAD_BOT, calcCols, calcColWidth, calcContentWidth, calcPageStride, calcTotalPages } from './paging.js';
 
@@ -816,7 +816,7 @@
   }
 
   $: displayItems, updateScrollThumb();
-  $: displayItems = (now, collapsedFeeds, mode === MODE_FEEDS
+  $: displayItems = (now, collapsedFeeds, sortOldest, showRead, grouped, groupedCats, mode === MODE_FEEDS
     ? feeds.map((f, i) => ({
         type:      'item',
         cursorIdx: i,
@@ -863,6 +863,25 @@
       showToast('Save failed: ' + e, 4000);
     } finally {
       settingsSaving = false;
+    }
+  }
+
+  let settingsClearing = false;
+  async function clearCache() {
+    settingsClearing = true;
+    try {
+      const result = await ClearCache();
+      allEntries = result.entries ?? [];
+      feeds      = result.feeds   ?? [];
+      entries    = filterByFeed(allEntries, filterFeedID);
+      if (cursor >= entries.length) cursor = 0;
+      refreshStatus();
+      settingsOpen = false;
+      showToast('Cache cleared', 2500);
+    } catch (e) {
+      showToast('Clear cache failed: ' + e, 4000);
+    } finally {
+      settingsClearing = false;
     }
   }
 </script>
@@ -1067,6 +1086,9 @@
         </label>
       </div>
       <div class="settings-footer">
+        <button class="settings-clear-cache" on:click={clearCache} disabled={settingsClearing}>
+          {settingsClearing ? 'Clearing…' : 'Clear cache'}
+        </button>
         <button class="settings-save" on:click={saveSettings} disabled={settingsSaving}>
           {settingsSaving ? 'Saving…' : 'Save'}
         </button>
@@ -1827,7 +1849,7 @@
     padding: 10px 16px;
     border-top: 1px solid #414868;
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
     flex-shrink: 0;
   }
 
@@ -1845,5 +1867,20 @@
   }
   .settings-save:hover:not(:disabled)  { background: #3d59a1; color: #c0caf5; }
   .settings-save:disabled { opacity: 0.5; cursor: default; }
+
+  .settings-clear-cache {
+    background: transparent;
+    border: 1px solid #414868;
+    border-radius: 4px;
+    color: #565f89;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 6px 18px;
+    transition: border-color 80ms, color 80ms;
+  }
+  .settings-clear-cache:hover:not(:disabled) { border-color: #7aa2f7; color: #7aa2f7; }
+  .settings-clear-cache:disabled { opacity: 0.5; cursor: default; }
 
 </style>

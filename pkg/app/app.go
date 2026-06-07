@@ -134,8 +134,10 @@ func (a *App) FetchEntries() (*FetchResult, error) {
 	copy(merged, fresh)
 	if a.cache != nil {
 		freshSet := make(map[int]bool, len(fresh))
+		freshFeedMap := make(map[int]miniflux.Feed, len(fresh))
 		for _, e := range fresh {
 			freshSet[e.ID] = true
+			freshFeedMap[e.FeedID] = e.Feed
 		}
 		cached, _ := a.cache.All()
 		fetchedAtMap := make(map[int]time.Time, len(cached))
@@ -151,10 +153,22 @@ func (a *App) FetchEntries() (*FetchResult, error) {
 			}
 		}
 		_ = a.cache.Put(merged[:len(fresh)])
+		var toReCache []miniflux.FeedEntry
 		for _, e := range cached {
 			if !freshSet[e.ID] {
+				// Propagate current feed metadata (including category) to stale cached
+				// entries that may have been stored before the Category field existed.
+				if e.Feed.Category.ID == 0 {
+					if f, ok := freshFeedMap[e.FeedID]; ok {
+						e.Feed = f
+						toReCache = append(toReCache, e)
+					}
+				}
 				merged = append(merged, e)
 			}
+		}
+		if len(toReCache) > 0 {
+			_ = a.cache.Put(toReCache)
 		}
 	}
 
@@ -164,6 +178,16 @@ func (a *App) FetchEntries() (*FetchResult, error) {
 
 func (a *App) RefreshAndFetch() (*FetchResult, error) {
 	_ = a.client.RefreshAllFeeds()
+	return a.FetchEntries()
+}
+
+// ClearCache wipes the local entry cache and fetches fresh data from Miniflux.
+func (a *App) ClearCache() (*FetchResult, error) {
+	if a.cache != nil {
+		if err := a.cache.Clear(); err != nil {
+			return nil, fmt.Errorf("clear cache: %w", err)
+		}
+	}
 	return a.FetchEntries()
 }
 
