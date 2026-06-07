@@ -53,7 +53,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           gh release view "v${PKGVER}" > /dev/null 2>&1 || \
-            gh release create "v${PKGVER}" --title "v${PKGVER}" --generate-notes
+            gh release create "v${PKGVER}" --title "v${PKGVER}" --generate-notes --latest
           gh release upload "v${PKGVER}" "${TARBALL}" --clobber
 
       - name: Update PKGBUILD sha256 on main
