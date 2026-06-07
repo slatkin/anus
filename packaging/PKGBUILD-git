@@ -53,4 +53,7 @@ package() {
     magick "$icon_src" -resize "${sz}x${sz}" \
       "$pkgdir/usr/share/icons/hicolor/${sz}x${sz}/apps/anus.png"
   done
+
+  install -Dm644 assets/appicon.svg \
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/anus.svg"
 }
