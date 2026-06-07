@@ -57,16 +57,12 @@
   let navPaneEl = null;
   let thumbTop = 0;
   let thumbHeight = 0;
-  let thumbAtTop = true;
-  let thumbAtBottom = false;
 
   function updateScrollThumb() {
     if (!navPaneEl) return;
     const { scrollTop, scrollHeight, clientHeight } = navPaneEl;
-    thumbHeight = Math.max(30, (clientHeight / scrollHeight) * clientHeight);
-    thumbTop = (scrollTop / (scrollHeight - clientHeight)) * (clientHeight - thumbHeight);
-    thumbAtTop = thumbTop <= 0;
-    thumbAtBottom = thumbTop + thumbHeight >= clientHeight;
+    thumbHeight = Math.max(30, (clientHeight / scrollHeight) * (clientHeight - 4));
+    thumbTop = 2 + (scrollTop / (scrollHeight - clientHeight)) * (clientHeight - thumbHeight - 4);
   }
 
   function onThumbMousedown(e) {
@@ -201,7 +197,16 @@
     if (synced !== -1 && synced !== cursor) cursor = synced;
   }
 
+  let windowFocused = true;
   onMount(async () => {
+    const onBlur      = () => { windowFocused = false; };
+    const onFocus     = () => { windowFocused = true; };
+    const onKeydown   = () => { document.body.style.cursor = 'none'; windowFocused = false; };
+    const onMousemove = () => { document.body.style.cursor = ''; windowFocused = true; };
+    window.addEventListener('blur',      onBlur);
+    window.addEventListener('focus',     onFocus);
+    window.addEventListener('keydown',   onKeydown);
+    window.addEventListener('mousemove', onMousemove);
     await loadCached();
     await tick();
     Show();
@@ -233,7 +238,7 @@
       await tick();
       const savedId  = parseInt(localStorage.getItem('lastArticleId') || '0', 10);
       const savedIdx = savedId ? displayEntries.findIndex(e => e.id === savedId) : -1;
-      openArticle(savedIdx !== -1 ? savedIdx : 0);
+      if (savedIdx !== -1) openArticle(savedIdx);
     } catch (_) {
       // cache unavailable — fall through to live fetch
     }
@@ -834,7 +839,7 @@
       </div>
 
       <div class="nav-pane-wrap nav-collapsible">
-      <div class="nav-pane" bind:this={navPaneEl} on:scroll={updateScrollThumb}>
+      <div class="nav-pane" class:window-focused={windowFocused} bind:this={navPaneEl} on:scroll={updateScrollThumb}>
       {#if loading}
         <div class="nav-empty">Loading…</div>
       {:else if error}
@@ -879,7 +884,7 @@
             aria-valuemin={0}
             aria-valuemax={100}
             tabindex="0"
-            style="top:{thumbTop}px; height:{thumbHeight}px; border-radius: {thumbAtTop ? '0' : '4px'} {thumbAtTop ? '0' : '4px'} {thumbAtBottom ? '0' : '4px'} {thumbAtBottom ? '0' : '4px'}"
+            style="top:{thumbTop}px; height:{thumbHeight}px"
             on:mousedown={onThumbMousedown}>
           </div>
         </div>
@@ -1281,9 +1286,10 @@
     user-select: none;
     transition: background 0.08s;
   }
-  .nav-item:hover    { background: #24283b; }
-  .nav-item.selected { background: #414868; }
-  .nav-item.open     { background: #292e42; }
+  .nav-pane.window-focused .nav-item:hover { background: #24283b; }
+  .nav-item.selected .nav-title { color: #c0caf5; }
+  .nav-item.open { box-shadow: inset 5px 0 0 #73daca; }
+  .nav-item.open     .nav-title { color: #73daca; }
 
   .nav-title {
     font-size: 13px;
@@ -1307,7 +1313,6 @@
   }
   .nav-item.selected .nav-sub { color: #7a89b8; }
   .nav-item.open     .nav-sub { color: #6b7499; }
-  .nav-item.open     .nav-title { color: #73daca; }
 
   .bottom-pad-mask {
     position: absolute;
