@@ -54,6 +54,10 @@ services:
 docker compose up -d
 ```
 
+### Getting your Miniflux API key
+
+In your Miniflux instance: **Settings → API Keys → Create a new API key**. Copy the key and use it as `MINIFLUX_API_KEY`.
+
 ### Environment variables
 
 | Variable | Required | Default | Description |
