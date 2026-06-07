@@ -2,7 +2,7 @@
 
 **A newsreader, unfussy & simple.**
 
-anus is a [Miniflux](https://miniflux.app/) reader available as both a native Linux desktop app and a self-hosted web service. It was built with Go, Svelte, and [Wails v2](https://wails.io/). As I would never have the time to spend making something so niche on my own in my free time, this is a vibe-coding project and could possibly be the end of the world.
+anus is a [Miniflux](https://miniflux.app/) reader available as both a native Linux desktop app and a self-hosted web service. It was built with Go, Svelte, and [Wails v2](https://wails.io/). As I would never have the time to spend making something so niche on my own in my free time, this is a vibe-coding project and could possibly result in the end of human civilisation.
 
 anus can be used two ways: as a local client or as a web service running in a docker container.
 
