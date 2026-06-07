@@ -1068,7 +1068,7 @@
     transition:fade={{ duration: 150 }}>
     <div class="settings-modal" transition:fly={{ y: 20, duration: 180 }}>
       <div class="settings-header">
-        <span class="settings-title">Settings</span>
+        <span class="settings-title">Settings <span class="settings-version">v{__APP_VERSION__}</span></span>
         <button class="settings-close" on:click={() => settingsOpen = false}>✕</button>
       </div>
       <div class="settings-body">
@@ -1093,6 +1093,7 @@
           {settingsSaving ? 'Saving…' : 'Save'}
         </button>
       </div>
+
     </div>
   </div>
 {/if}
@@ -1851,6 +1852,12 @@
     display: flex;
     justify-content: space-between;
     flex-shrink: 0;
+  }
+  .settings-version {
+    font-size: 11px;
+    font-weight: 400;
+    color: #414868;
+    margin-left: 6px;
   }
 
   .settings-save {
