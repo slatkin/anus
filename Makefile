@@ -64,6 +64,7 @@ ICON_SIZES := 16 32 48 64 128 256
 install: build-ui
 	install -Dm755 $(OUTDIR)/$(BIN_UI) $(PREFIX)/bin/$(BIN_UI)
 	install -Dm644 anus.desktop $(PREFIX)/share/applications/anus.desktop
+	install -Dm644 assets/appicon.svg $(PREFIX)/share/icons/hicolor/scalable/apps/$(BIN_UI).svg
 	for sz in $(ICON_SIZES); do \
 		mkdir -p $(PREFIX)/share/icons/hicolor/$${sz}x$${sz}/apps && \
 		magick $(ICON_SRC) -resize $${sz}x$${sz} $(PREFIX)/share/icons/hicolor/$${sz}x$${sz}/apps/$(BIN_UI).png; \
@@ -72,6 +73,7 @@ install: build-ui
 uninstall:
 	rm -f $(PREFIX)/bin/$(BIN_UI)
 	rm -f $(PREFIX)/share/applications/anus.desktop
+	rm -f $(PREFIX)/share/icons/hicolor/scalable/apps/$(BIN_UI).svg
 	for sz in $(ICON_SIZES); do \
 		rm -f $(PREFIX)/share/icons/hicolor/$${sz}x$${sz}/apps/$(BIN_UI).png; \
 	done

@@ -21,4 +21,7 @@ package() {
     install -Dm644 "icons/${sz}x${sz}/$pkgname.png" \
       "$pkgdir/usr/share/icons/hicolor/${sz}x${sz}/apps/$pkgname.png"
   done
+
+  install -Dm644 "$pkgname.svg" \
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/$pkgname.svg"
 }
