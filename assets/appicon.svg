@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Left flared lines: fan outward from circle edge -->
+  <line x1="32" y1="50" x2="2"  y2="28" stroke="#D97757" stroke-width="8" stroke-linecap="round"/>
+  <line x1="30" y1="50" x2="2"  y2="50" stroke="#D97757" stroke-width="8" stroke-linecap="round"/>
+  <line x1="32" y1="50" x2="2"  y2="72" stroke="#D97757" stroke-width="8" stroke-linecap="round"/>
+  <!-- Right flared lines: mirror -->
+  <line x1="68" y1="50" x2="98" y2="28" stroke="#D97757" stroke-width="8" stroke-linecap="round"/>
+  <line x1="70" y1="50" x2="98" y2="50" stroke="#D97757" stroke-width="8" stroke-linecap="round"/>
+  <line x1="68" y1="50" x2="98" y2="72" stroke="#D97757" stroke-width="8" stroke-linecap="round"/>
+  <!-- Circle on top -->
+  <circle cx="50" cy="50" r="23" fill="#D97757"/>
+</svg>
