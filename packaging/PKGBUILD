@@ -1,6 +1,6 @@
 # Maintainer: slatkin <slatkin@gmail.com>
 pkgname=anus
-pkgver=0.4.1
+pkgver=0.4.2
 pkgrel=1
 pkgdesc='Miniflux desktop reader'
 arch=('x86_64')
