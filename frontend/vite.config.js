@@ -4,8 +4,11 @@ import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 
 const apiMode = process.env.VITE_API ?? 'web'
-const wailsJson = JSON.parse(readFileSync(path.resolve(__dirname, '../wails.json'), 'utf-8'))
-const appVersion = wailsJson?.info?.productVersion ?? ''
+let appVersion = ''
+try {
+  const wailsJson = JSON.parse(readFileSync(path.resolve(__dirname, '../wails.json'), 'utf-8'))
+  appVersion = wailsJson?.info?.productVersion ?? ''
+} catch {}
 
 export default defineConfig({
   define: {
