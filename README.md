@@ -147,6 +147,30 @@ remember_read_position = true
 | `r` | Refresh articles from Miniflux |
 | `?` | Show shortcut hint in status bar |
 
+### Search
+
+| Key | Action |
+|-----|--------|
+| `/` | Open search |
+| `Enter` | Run search |
+| `Esc` | Close search and return to normal list |
+
+Click the search icon in the bottom toolbar to open search with the mouse.
+
+In search mode the article list shows only results from Miniflux's full-text search. Matched terms are highlighted in the reader. The search input turns green on results, red on no results. Press `Esc` or `b` to exit; the list scrolls back to the previously selected article, expanding its group and enabling the "all" filter if needed.
+
+### Grouping
+
+Use the **Group** button in the toolbar to switch between three list layouts:
+
+| Mode | Description |
+|------|-------------|
+| Ungrouped | Flat list of all articles sorted by date |
+| By feed | Articles grouped under their feed name |
+| By category | Articles grouped under their Miniflux category |
+
+In grouped modes, click a group header to collapse or expand it. The collapse-all / expand-all buttons above the list act on all groups at once. Groups are always expanded in search mode.
+
 ---
 
 ## Development
