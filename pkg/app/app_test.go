@@ -12,10 +12,13 @@ import (
 // ── mock client ───────────────────────────────────────────────────────────
 
 type mockClient struct {
-	unread    []miniflux.FeedEntry
-	read      []miniflux.FeedEntry
-	unreadErr error
-	readErr   error
+	unread     []miniflux.FeedEntry
+	read       []miniflux.FeedEntry
+	search     []miniflux.FeedEntry
+	unreadErr  error
+	readErr    error
+	searchErr  error
+	searchQuery string
 
 	markReadCalled   []int
 	markUnreadCalled []int
@@ -66,6 +69,19 @@ func (m *mockClient) SaveEntry(id int) error {
 	return nil
 }
 
+func (m *mockClient) SearchEntries(query string, limit, offset int) ([]miniflux.FeedEntry, int, error) {
+	m.searchQuery = query
+	if m.searchErr != nil {
+		return nil, 0, m.searchErr
+	}
+	end := offset + limit
+	if end > len(m.search) {
+		end = len(m.search)
+	}
+	page := m.search[offset:end]
+	return page, len(m.search), nil
+}
+
 func (m *mockClient) RefreshAllFeeds() error { return nil }
 
 // ── helpers ───────────────────────────────────────────────────────────────
@@ -79,6 +95,12 @@ func entry(id int, status miniflux.ReadStatus) miniflux.FeedEntry {
 		FeedID:      1,
 		Feed:        miniflux.Feed{Title: "Feed"},
 	}
+}
+
+func entryAt(id int, status miniflux.ReadStatus, published time.Time) miniflux.FeedEntry {
+	e := entry(id, status)
+	e.PublishedAt = published
+	return e
 }
 
 func newApp(t *testing.T, mc *mockClient) (*app.App, string) {
@@ -228,5 +250,110 @@ func TestSaveEntry_CallsClient(t *testing.T) {
 	}
 	if len(mc.saveCalled) != 1 || mc.saveCalled[0] != 42 {
 		t.Errorf("SaveEntry: client got %v, want [42]", mc.saveCalled)
+	}
+}
+
+// ── SearchEntries ──────────────────────────────────────────────────────────
+
+func TestSearchEntries_ReturnsResults(t *testing.T) {
+	mc := &mockClient{
+		search: []miniflux.FeedEntry{
+			entry(1, miniflux.ReadStatusUnread),
+			entry(2, miniflux.ReadStatusRead),
+		},
+	}
+	a, _ := newApp(t, mc)
+	result, err := a.SearchEntries("cheese")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Entries) != 2 {
+		t.Errorf("got %d entries, want 2", len(result.Entries))
+	}
+	if mc.searchQuery != "cheese" {
+		t.Errorf("client got query %q, want %q", mc.searchQuery, "cheese")
+	}
+}
+
+func TestSearchEntries_NilEntriesFromClientReturnsEmpty(t *testing.T) {
+	// Miniflux returns null entries JSON when there are no results.
+	mc := &mockClient{search: nil}
+	a, _ := newApp(t, mc)
+	result, err := a.SearchEntries("nomatch")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil FetchResult")
+	}
+	if len(result.Entries) != 0 {
+		t.Errorf("got %d entries, want 0", len(result.Entries))
+	}
+}
+
+func TestSearchEntries_PropagatesClientError(t *testing.T) {
+	mc := &mockClient{searchErr: errors.New("server error")}
+	a, _ := newApp(t, mc)
+	_, err := a.SearchEntries("anything")
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+}
+
+func TestSearchEntries_PaginatesResults(t *testing.T) {
+	// Build 250 entries so SearchEntries must paginate (pageSize=100).
+	entries := make([]miniflux.FeedEntry, 250)
+	for i := range entries {
+		entries[i] = entry(i+1, miniflux.ReadStatusUnread)
+	}
+	mc := &mockClient{search: entries}
+	a, _ := newApp(t, mc)
+	result, err := a.SearchEntries("anything")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Entries) != 250 {
+		t.Errorf("got %d entries, want 250", len(result.Entries))
+	}
+}
+
+func TestSearchEntries_SortsByDateDescending(t *testing.T) {
+	now := time.Now()
+	mc := &mockClient{
+		search: []miniflux.FeedEntry{
+			entryAt(1, miniflux.ReadStatusUnread, now.Add(-2*time.Hour)),
+			entryAt(2, miniflux.ReadStatusUnread, now),
+			entryAt(3, miniflux.ReadStatusUnread, now.Add(-1*time.Hour)),
+		},
+	}
+	a, _ := newApp(t, mc)
+	result, err := a.SearchEntries("q")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Entries[0].ID != 2 || result.Entries[1].ID != 3 || result.Entries[2].ID != 1 {
+		ids := make([]int, len(result.Entries))
+		for i, e := range result.Entries {
+			ids[i] = e.ID
+		}
+		t.Errorf("wrong sort order, got IDs %v, want [2 3 1]", ids)
+	}
+}
+
+func TestSearchEntries_BuildsFeedList(t *testing.T) {
+	e1 := entry(1, miniflux.ReadStatusUnread)
+	e1.FeedID = 10
+	e1.Feed = miniflux.Feed{Title: "Tech Feed"}
+	e2 := entry(2, miniflux.ReadStatusRead)
+	e2.FeedID = 20
+	e2.Feed = miniflux.Feed{Title: "Sports Feed"}
+	mc := &mockClient{search: []miniflux.FeedEntry{e1, e2}}
+	a, _ := newApp(t, mc)
+	result, err := a.SearchEntries("q")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Feeds) != 2 {
+		t.Errorf("got %d feed summaries, want 2", len(result.Feeds))
 	}
 }

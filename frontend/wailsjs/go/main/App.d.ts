@@ -29,6 +29,8 @@ export function SaveConfig(arg1:config.Config):Promise<void>;
 
 export function SaveEntry(arg1:number):Promise<void>;
 
+export function SearchEntries(arg1:string):Promise<app.FetchResult>;
+
 export function Show():Promise<void>;
 
 export function ToggleStar(arg1:number):Promise<void>;

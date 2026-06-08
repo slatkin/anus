@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -158,6 +159,21 @@ func (c *Client) MarkAllAsRead(entryIDs []int) error {
 func (c *Client) RefreshAllFeeds() error {
 	_, err := c.doRequest("PUT", "/v1/feeds/refresh", nil)
 	return err
+}
+
+func (c *Client) SearchEntries(query string, limit, offset int) ([]FeedEntry, int, error) {
+	path := fmt.Sprintf("/v1/entries?search=%s&order=published_at&direction=desc&limit=%d&offset=%d",
+		url.QueryEscape(query), limit, offset)
+	resp, err := c.doRequest("GET", path, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	var result FeedEntriesResponse
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, 0, err
+	}
+	c.fixProxyURLs(result.Entries)
+	return result.Entries, result.Total, nil
 }
 
 func (c *Client) FetchOriginalContent(entryID int) (string, error) {

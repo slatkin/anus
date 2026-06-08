@@ -54,6 +54,12 @@ export async function SaveEntry(id) {
   return post('/api/save-entry', { id });
 }
 
+export async function SearchEntries(query) {
+  const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export function OpenURL(url) {
   window.open(url, '_blank', 'noopener,noreferrer');
 }

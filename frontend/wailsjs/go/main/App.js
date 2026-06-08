@@ -54,6 +54,10 @@ export function SaveEntry(arg1) {
   return window['go']['main']['App']['SaveEntry'](arg1);
 }
 
+export function SearchEntries(arg1) {
+  return window['go']['main']['App']['SearchEntries'](arg1);
+}
+
 export function Show() {
   return window['go']['main']['App']['Show']();
 }

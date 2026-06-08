@@ -17,6 +17,7 @@ import (
 type MinifluxClient interface {
 	GetUnreadEntries(limit, offset int) ([]miniflux.FeedEntry, int, error)
 	GetReadEntries(since time.Time, limit, offset int) ([]miniflux.FeedEntry, int, error)
+	SearchEntries(query string, limit, offset int) ([]miniflux.FeedEntry, int, error)
 	ChangeEntryReadStatus(ids []int, status miniflux.ReadStatus) error
 	ToggleStarred(id int) error
 	SaveEntry(id int) error
@@ -174,6 +175,24 @@ func (a *App) FetchEntries() (*FetchResult, error) {
 
 	sortByDate(merged)
 	return &FetchResult{Entries: merged, Feeds: buildFeedList(merged)}, nil
+}
+
+func (a *App) SearchEntries(query string) (*FetchResult, error) {
+	const pageSize = 100
+	var all []miniflux.FeedEntry
+	for offset := 0; ; {
+		entries, total, err := a.client.SearchEntries(query, pageSize, offset)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, entries...)
+		offset += len(entries)
+		if offset >= total || len(entries) == 0 {
+			break
+		}
+	}
+	sortByDate(all)
+	return &FetchResult{Entries: all, Feeds: buildFeedList(all)}, nil
 }
 
 func (a *App) RefreshAndFetch() (*FetchResult, error) {

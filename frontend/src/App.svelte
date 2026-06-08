@@ -1,9 +1,10 @@
 <script>
   import { onMount, onDestroy, tick } from 'svelte';
   import { fade, fly } from 'svelte/transition';
-  import { FetchCached, FetchEntries, RefreshAndFetch, ClearCache, FetchArticleContent, MarkRead, MarkUnread, ToggleStar, SaveEntry, OpenURL, Show, GetConfig, SaveConfig } from './api.js';
-  import { BookOpen, Bookmark, ChevronsDownUp, ChevronsUpDown, ExternalLink, EyeOff, Minus, Plus, Settings } from 'lucide-svelte';
+  import { FetchCached, FetchEntries, RefreshAndFetch, ClearCache, FetchArticleContent, MarkRead, MarkUnread, ToggleStar, SaveEntry, SearchEntries, OpenURL, Show, GetConfig, SaveConfig } from './api.js';
+  import { BookOpen, Bookmark, ChevronsDownUp, ChevronsUpDown, ExternalLink, EyeOff, Minus, Plus, Search, Settings } from 'lucide-svelte';
   import { COL_PAD, COL_GAP, COL_PAD_TOP, COL_PAD_BOT, calcCols, calcColWidth, calcContentWidth, calcPageStride, calcTotalPages } from './paging.js';
+  import { EMPTY_SET, buildGroupedItems as _buildGroupedItems, buildGroupedCatItems as _buildGroupedCatItems } from './grouping.js';
 
   const MODE_ENTRIES = 'entries';
   const MODE_FEEDS   = 'feeds';
@@ -14,6 +15,14 @@
   let focus  = FOCUS_LIST;
   let loading = true;
   let error   = null;
+
+  let searchOpen      = false;
+  let searchQuery     = '';
+  let searchResults   = null;
+  let searchFired     = false;
+  let searchDebounce;
+  let searchInputEl;
+  $: searchInputColor = !searchFired ? '#e0af68' : (searchResults?.length ? '#9ece6a' : '#f7768e');
 
   let allEntries  = [];
   let entries     = [];
@@ -192,14 +201,17 @@
     ? [...filteredEntries].sort((a, b) => -entryOrder(a, b))
     : [...filteredEntries].sort(entryOrder);
 
-  // Clamp cursor when displayEntries shrinks (e.g. toggle flipped).
-  $: if (mode === MODE_ENTRIES && !loading && cursor >= displayEntries.length) {
+  // activeEntries is the source of truth for navigation when search is active.
+  $: activeEntries = searchResults !== null ? searchResults : displayEntries;
+
+  // Clamp cursor when activeEntries shrinks (e.g. toggle flipped).
+  $: if (mode === MODE_ENTRIES && !loading && searchResults === null && cursor >= displayEntries.length) {
     cursor = Math.max(0, displayEntries.length - 1);
   }
 
   // Re-sync cursor to selectedEntry after displayEntries shifts (e.g. prev article
   // removed from filtered list when marked read, or background poll reorders entries).
-  $: if (mode === MODE_ENTRIES && selectedEntry) {
+  $: if (mode === MODE_ENTRIES && selectedEntry && searchResults === null) {
     const synced = displayEntries.findIndex(e => e.id === selectedEntry.id);
     if (synced !== -1 && synced !== cursor) cursor = synced;
   }
@@ -346,7 +358,7 @@
     const items = navOrder();
     const pos = items.findIndex(item => item.cursorIdx === cursor);
     for (let i = pos + 1; i < items.length; i++) {
-      if (displayEntries[items[i].cursorIdx]?.status === 'unread') {
+      if (activeEntries[items[i].cursorIdx]?.status === 'unread') {
         openArticle(items[i].cursorIdx);
         return;
       }
@@ -403,7 +415,7 @@
   }
 
   function openArticle(idx) {
-    if (idx < 0 || idx >= displayEntries.length) return;
+    if (idx < 0 || idx >= activeEntries.length) return;
 
     const prev = selectedEntry;
     if (prev && prev.status === 'unread' && !keptUnread.has(prev.id)) {
@@ -414,7 +426,7 @@
     selectedIdx      = idx;
     cursor           = idx;
     focus            = FOCUS_READER;
-    selectedEntry    = displayEntries[idx];
+    selectedEntry    = activeEntries[idx];
     originalContent  = null;
     fetchingOriginal = false;
     localStorage.setItem('lastArticleId', String(selectedEntry.id));
@@ -558,7 +570,7 @@
   }
 
   function currentEntry() {
-    return focus === FOCUS_READER ? selectedEntry : (displayEntries[cursor] ?? null);
+    return focus === FOCUS_READER ? selectedEntry : (activeEntries[cursor] ?? null);
   }
 
   function mutateEntry(id, fn) {
@@ -578,10 +590,10 @@
   function refreshStatus() {
     clearTimeout(statusTimeout);
     if (loading) { statusText = 'Loading…'; return; }
-    const n   = (mode === MODE_FEEDS ? feeds : displayEntries).length;
+    const n   = (mode === MODE_FEEDS ? feeds : activeEntries).length;
     const cur = (mode === MODE_FEEDS ? feedCursor : cursor) + 1;
     if (focus === FOCUS_READER) {
-      statusText = `[${selectedIdx + 1}/${displayEntries.length}]  ↑↓ prev/next  space mark read  b back  u read  s star  e save  o open  x original`;
+      statusText = `[${selectedIdx + 1}/${activeEntries.length}]  ↑↓ prev/next  space mark read  b back  u read  s star  e save  o open  x original`;
     } else if (mode === MODE_FEEDS) {
       statusText = `${cur}/${n}  enter open  r refresh`;
     } else {
@@ -591,13 +603,74 @@
 
   // ── keyboard ──────────────────────────────────────────────────────
 
+  function openSearch() {
+    searchOpen    = true;
+    searchResults = [];
+    tick().then(() => searchInputEl?.focus());
+  }
+
+  async function closeSearch() {
+    const saved = selectedEntry;
+    searchOpen    = false;
+    searchQuery   = '';
+    searchResults = null;
+    searchFired   = false;
+    clearTimeout(searchDebounce);
+
+    if (!saved) return;
+
+    // If the article is read but the "all" filter is off, enable it so it's visible.
+    if (saved.status === 'read' && !showRead) showRead = true;
+
+    // If it's in a collapsed group, expand that group.
+    if (grouped) {
+      if (collapsedFeeds.has(saved.feed_id)) {
+        collapsedFeeds = new Set([...collapsedFeeds].filter(k => k !== saved.feed_id));
+      }
+    } else if (groupedCats) {
+      const catKey = saved.feed?.category?.title || 'All';
+      if (collapsedFeeds.has(catKey)) {
+        collapsedFeeds = new Set([...collapsedFeeds].filter(k => k !== catKey));
+      }
+    }
+
+    await tick();
+
+    const idx = displayEntries.findIndex(e => e.id === saved.id);
+    if (idx !== -1) {
+      cursor = idx;
+      scrollCursorIntoView();
+    }
+  }
+
+  function onSearchInput() {
+    clearTimeout(searchDebounce);
+    searchFired = false;
+    if (!searchQuery.trim()) { searchResults = []; return; }
+    searchDebounce = setTimeout(doSearch, 600);
+  }
+
+  async function doSearch() {
+    searchFired = true;
+    if (!searchQuery.trim()) { searchResults = []; return; }
+    try {
+      const r = await SearchEntries(searchQuery);
+      searchResults = r.entries ?? [];
+    } catch (err) { setStatus('Search error: ' + err.message, 3000); }
+  }
+
   function handleKeydown(e) {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
     switch (e.key) {
       case 'ArrowDown':  e.preventDefault(); moveDown(); break;
       case 'ArrowUp':    e.preventDefault(); moveUp();   break;
       case 'Enter':      e.preventDefault(); selectCurrent(); break;
-      case 'Escape': case 'Backspace': case 'b': e.preventDefault(); goBack(); break;
+      case 'Escape': case 'Backspace': case 'b':
+        e.preventDefault();
+        if (searchOpen) { closeSearch(); return; }
+        goBack();
+        break;
+      case '/': e.preventDefault(); openSearch(); break;
       case 'f': showFeeds(); break;
       case 'u': case 'm': toggleRead(); break;
       case 's': toggleStar(); break;
@@ -761,82 +834,103 @@
     return doc.body.innerHTML;
   }
 
-  $: activeCursor = mode === MODE_FEEDS ? feedCursor : cursor;
+  const _HIGHLIGHT_SKIP = new Set(['SCRIPT', 'STYLE', 'PRE', 'CODE']);
 
-  function buildGroupedItems(entries) {
-    const byFeed = new Map();
-    const order = [];
-    entries.forEach((e, idx) => {
-      if (!byFeed.has(e.feed_id)) {
-        byFeed.set(e.feed_id, { title: e.feed.title, rows: [] });
-        order.push(e.feed_id);
+  function highlightTerms(html, query) {
+    const STOP = new Set(['the','in','of','a','an','is','it','to','and','or','for','on','at','by','as','be','was','are','has','had','have','but','not','this','that','with','from','its','than','then','into','over','also','after','before','about','so','if','do','no','up','out','can','all','any','my','we','you','he','she','they','his','her','our','your','their','what','who','which','when','where','how','will','just','been','one','would','could','should','may','might','more','most','some','such']);
+    const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const phrase = query.trim();
+    const tokens = phrase.split(/\s+/).filter(w => w.length >= 4 && !STOP.has(w.toLowerCase()));
+    if (!tokens.length && !phrase) return html;
+    const parts = [esc(phrase), ...tokens.map(esc)].filter(Boolean);
+    const pat = new RegExp(`(${parts.join('|')})`, 'gi');
+    const doc = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html');
+    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        let el = node.parentElement;
+        while (el) {
+          if (_HIGHLIGHT_SKIP.has(el.tagName)) return NodeFilter.FILTER_REJECT;
+          el = el.parentElement;
+        }
+        return NodeFilter.FILTER_ACCEPT;
       }
-      byFeed.get(e.feed_id).rows.push({
-        type: 'item',
-        cursorIdx: idx,
-        id:    e.id,
-        title: e.title,
-        sub:   (e.starred ? '★  ' : '') + timeAgo(e.published_at),
-        unread: e.status === 'unread',
-      });
     });
-    order.sort((a, b) => byFeed.get(a).title.localeCompare(byFeed.get(b).title));
-    const out = [];
-    for (const feedId of order) {
-      const { title, rows } = byFeed.get(feedId);
-      const collapsed = collapsedFeeds.has(feedId);
-      out.push({ type: 'header', title, feedId, collapsed, count: rows.length });
-      if (!collapsed) out.push(...rows);
+    const nodes = [];
+    let n;
+    while ((n = walker.nextNode())) nodes.push(n);
+    for (const textNode of nodes) {
+      const text = textNode.textContent;
+      if (!pat.test(text)) { pat.lastIndex = 0; continue; }
+      pat.lastIndex = 0;
+      const frag = doc.createDocumentFragment();
+      let last = 0, m;
+      while ((m = pat.exec(text)) !== null) {
+        if (m.index > last) frag.appendChild(doc.createTextNode(text.slice(last, m.index)));
+        const mark = doc.createElement('mark');
+        mark.textContent = m[0];
+        frag.appendChild(mark);
+        last = pat.lastIndex;
+      }
+      if (last < text.length) frag.appendChild(doc.createTextNode(text.slice(last)));
+      textNode.parentNode.replaceChild(frag, textNode);
     }
-    return out;
+    return doc.body.innerHTML;
   }
 
-  function buildGroupedCatItems(entries) {
-    const byCat = new Map();
-    const order = [];
-    entries.forEach((e, idx) => {
-      const catTitle = e.feed.category?.title || 'All';
-      const key = catTitle;
-      if (!byCat.has(key)) { byCat.set(key, { title: catTitle, rows: [] }); order.push(key); }
-      byCat.get(key).rows.push({
-        type: 'item', cursorIdx: idx, id: e.id, title: e.title,
-        sub:  (e.starred ? '★  ' : '') + e.feed.title + '  ·  ' + timeAgo(e.published_at),
-        unread: e.status === 'unread',
-      });
-    });
-    order.sort((a, b) => a.localeCompare(b));
-    const out = [];
-    for (const key of order) {
-      const { title, rows } = byCat.get(key);
-      const collapsed = collapsedFeeds.has(key);
-      out.push({ type: 'header', title, feedId: key, collapsed, count: rows.length });
-      if (!collapsed) out.push(...rows);
-    }
-    return out;
+  $: {
+    const raw = processContent(originalContent ?? selectedEntry?.content ?? '');
+    articleHtml = (searchResults !== null && searchQuery.trim() && selectedEntry)
+      ? highlightTerms(raw, searchQuery)
+      : raw;
+  }
+  let articleHtml = '';
+
+  $: activeCursor = mode === MODE_FEEDS ? feedCursor : cursor;
+
+  function buildGroupedItems(entries, collapsed = collapsedFeeds) {
+    return _buildGroupedItems(entries, collapsed, timeAgo);
+  }
+
+  function buildGroupedCatItems(entries, collapsed = collapsedFeeds) {
+    return _buildGroupedCatItems(entries, collapsed, timeAgo);
   }
 
   $: displayItems, updateScrollThumb();
-  $: displayItems = (now, collapsedFeeds, sortOldest, showRead, grouped, groupedCats, mode === MODE_FEEDS
-    ? feeds.map((f, i) => ({
-        type:      'item',
-        cursorIdx: i,
-        id:        f.feed_id,
-        title:     f.feed_title,
-        sub:       `${f.unread} unread`,
-        unread:    f.unread > 0,
-      }))
-    : grouped
-      ? buildGroupedItems(displayEntries)
-      : groupedCats
-      ? buildGroupedCatItems(displayEntries)
-      : displayEntries.map((e, idx) => ({
+  $: displayItems = (now, collapsedFeeds, sortOldest, showRead, grouped, groupedCats, searchResults,
+    searchResults !== null
+      ? (grouped
+          ? buildGroupedItems(searchResults, EMPTY_SET)
+          : groupedCats
+          ? buildGroupedCatItems(searchResults, EMPTY_SET)
+          : searchResults.map((e, idx) => ({
+              type:      'item',
+              cursorIdx: idx,
+              id:        e.id,
+              title:     e.title,
+              sub:       (e.starred ? '★  ' : '') + e.feed.title + '  ·  ' + timeAgo(e.published_at),
+              unread:    e.status === 'unread',
+            })))
+      : mode === MODE_FEEDS
+      ? feeds.map((f, i) => ({
           type:      'item',
-          cursorIdx: idx,
-          id:        e.id,
-          title:     e.title,
-          sub:       (e.starred ? '★  ' : '') + e.feed.title + '  ·  ' + timeAgo(e.published_at),
-          unread:    e.status === 'unread',
-        })));
+          cursorIdx: i,
+          id:        f.feed_id,
+          title:     f.feed_title,
+          sub:       `${f.unread} unread`,
+          unread:    f.unread > 0,
+        }))
+      : grouped
+        ? buildGroupedItems(displayEntries)
+        : groupedCats
+        ? buildGroupedCatItems(displayEntries)
+        : displayEntries.map((e, idx) => ({
+            type:      'item',
+            cursorIdx: idx,
+            id:        e.id,
+            title:     e.title,
+            sub:       (e.starred ? '★  ' : '') + e.feed.title + '  ·  ' + timeAgo(e.published_at),
+            unread:    e.status === 'unread',
+          })));
 
   // ── settings ──────────────────────────────────────────────────────────
   let settingsOpen = false;
@@ -924,7 +1018,25 @@
         </div>
       </div>
 
-      {#if (grouped || groupedCats) && !navCollapsed}
+      {#if searchOpen && !navCollapsed}
+        <div class="search-bar" transition:fly={{ y: -20, duration: 150 }}>
+          <input
+            bind:this={searchInputEl}
+            bind:value={searchQuery}
+            on:input={onSearchInput}
+            on:keydown={e => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(searchDebounce); doSearch(); } else if (e.key === 'Escape') closeSearch(); }}
+            placeholder="Search…"
+            class="search-input"
+            style="color: {searchInputColor}"
+            type="search"
+          />
+          <button class="search-go-btn" on:click={doSearch} title="Search">
+            <Search size={14}/>
+          </button>
+        </div>
+      {/if}
+
+      {#if (grouped || groupedCats) && !navCollapsed && searchResults === null}
         <div class="group-actions-bar">
           <button class="pill" style="padding-right:0;gap:3px;display:flex;align-items:center" on:click={() => { collapsedFeeds = new Set(displayItems.filter(i => i.type === 'header').map(i => i.feedId)); }} title="Collapse all"><span style="position:relative;top:1px;display:flex"><ChevronsDownUp size={12}/></span>collapse</button><span style="color:#414868;font-size:11px;position:relative;top:-1px">/</span><button class="pill" style="padding-left:0;gap:3px;display:flex;align-items:center" on:click={() => { collapsedFeeds = new Set(); }} title="Expand all"><span style="position:relative;top:1px;display:flex"><ChevronsUpDown size={12}/></span>expand</button>
         </div>
@@ -937,7 +1049,7 @@
       {:else if error}
         <div class="nav-empty nav-error">{error}</div>
       {:else if displayItems.length === 0}
-        <div class="nav-empty">No unread articles</div>
+        <div class="nav-empty">{searchResults !== null ? (searchFired ? 'No matches' : '') : 'No unread articles'}</div>
       {:else}
         {#each displayItems as item}
           {#if item.type === 'header'}
@@ -993,6 +1105,10 @@
           <span class="toolbar-sep"></span>
           <button class="toolbar-btn" on:click={() => fetchEntries(false, true)} title="Refresh (r)">↺</button>
           <span class="toolbar-sep"></span>
+          <button class="nav-arrow-btn" class:active={searchOpen} on:click={openSearch} title="Search (/)" style="position:relative;top:1px">
+            <Search size={13}/>
+          </button>
+          <span class="toolbar-sep"></span>
           <button class="nav-arrow-btn" on:click={openSettings} title="Settings" style="position:relative;top:2px">
             <Settings size={14}/>
           </button>
@@ -1037,7 +1153,7 @@
               <button class="ctrl-btn" on:click={openBrowser} title="Open in browser"><ExternalLink size={14}/></button>
             </div>
             <div class="article-body" role="presentation" style="font-size: {fontSize}px" on:click={handleArticleClick} on:keydown={handleArticleClick} on:error|capture={handleArticleImgError}>
-              {@html processContent(originalContent ?? selectedEntry.content)}
+              {@html articleHtml}
             </div>
           </div>
         </div>
@@ -1174,6 +1290,44 @@
     position: relative;
     height: 38px;
   }
+
+  .search-bar {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    padding: 6px 10px;
+    background: #1a1b26;
+    border-bottom: 1px solid #2a2b3d;
+  }
+  .search-input {
+    flex: 1;
+    min-width: 0;
+    background: #24283b;
+    border: 1px solid #414868;
+    border-right: none;
+    border-radius: 4px 0 0 4px;
+    color: #c0caf5;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 300;
+    padding: 4px 8px;
+    outline: none;
+  }
+
+  .search-input::-webkit-search-cancel-button { display: none; }
+  .search-go-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1;
+    background: #24283b;
+    border: 1px solid #414868;
+    border-radius: 0 4px 4px 0;
+    color: #7aa2f7;
+    cursor: pointer;
+    padding: 0 4px;
+  }
+  .search-go-btn:hover { background: #2a2b3d; color: #c0caf5; }
 
   .nav-left { display: flex; gap: 2px; align-items: stretch; }
   .nav-ud-btns { display: flex; gap: 2px; }
@@ -1509,6 +1663,13 @@
     widows: 3;
     transition: transform 200ms ease;
     will-change: transform;
+  }
+
+  .reader-content .article-body :global(mark) {
+    background: #fef08a;
+    color: #1c1917;
+    border-radius: 2px;
+    padding: 0 1px;
   }
 
   .reader-content .article-body :global(h1),

@@ -144,6 +144,16 @@ func registerAPI(mux *http.ServeMux, a *app.App, cfg config.Config) {
 		writeJSON(w, result)
 	})
 
+	mux.HandleFunc("GET /api/search", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("q")
+		result, err := a.SearchEntries(q)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		writeJSON(w, result)
+	})
+
 	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, cfg)
 	})
