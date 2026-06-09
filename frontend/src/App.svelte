@@ -68,10 +68,12 @@
   let thumbTop = 0;
   let thumbHeight = 0;
   let stickyOffset = 0;
+  let needsScroll = false;
 
   function updateScrollThumb() {
     if (!navPaneEl) return;
     const { scrollTop, scrollHeight, clientHeight } = navPaneEl;
+    needsScroll = scrollHeight > clientHeight;
     const header = navPaneEl.querySelector('.nav-feed-header');
     stickyOffset = header ? header.offsetHeight : 0;
     const trackTop = stickyOffset + 2;
@@ -1078,7 +1080,7 @@
         {/each}
       {/if}
       </div><!-- /nav-pane -->
-      {#if showScrollbar}
+      {#if showScrollbar && needsScroll}
         <div class="custom-scrollbar">
           <div class="custom-scrollbar-thumb"
             role="scrollbar"
