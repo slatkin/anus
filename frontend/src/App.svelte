@@ -2,6 +2,8 @@
   import { onMount, onDestroy, tick } from 'svelte';
   import { FetchCached, FetchEntries, RefreshAndFetch, ClearCache, FetchArticleContent, MarkRead, MarkUnread, ToggleStar, SaveEntry, SearchEntries, OpenURL, Show, GetConfig, SaveConfig } from './api.js';
   import { ChevronsDownUp, ChevronsUpDown, Search, Settings } from 'lucide-svelte';
+  import NavFeedHeader from './components/NavFeedHeader.svelte';
+  import NavItem from './components/NavItem.svelte';
   import Toast from './components/Toast.svelte';
   import PageNav from './components/PageNav.svelte';
   import SearchBar from './components/SearchBar.svelte';
@@ -849,27 +851,16 @@
       {:else}
         {#each displayItems as item}
           {#if item.type === 'header'}
-            <div class="nav-feed-header" role="button" tabindex="0"
-              data-feed-id={item.feedId}
-              on:dblclick={() => toggleFeedCollapse(item.feedId)}
-              on:keydown={e => e.key === 'Enter' && toggleFeedCollapse(item.feedId)}>
-              <span class="feed-header-title">{item.title}</span>
-              {#if item.count != null}<span class="feed-header-count">{item.count}</span>{/if}
-            </div>
+            <NavFeedHeader {item} on:collapse={e => toggleFeedCollapse(e.detail)} />
           {:else}
-            <div
-              class="nav-item"
-              role="button"
-              tabindex="0"
-              class:selected={item.cursorIdx === activeCursor}
-              class:open={item.id === selectedEntry?.id && mode === MODE_ENTRIES}
-              bind:this={itemEls[item.cursorIdx]}
-              on:click={() => mode === MODE_FEEDS ? selectFeed(item.cursorIdx) : openArticle(item.cursorIdx)}
-              on:keydown={e => e.key === 'Enter' && (mode === MODE_FEEDS ? selectFeed(item.cursorIdx) : openArticle(item.cursorIdx))}
-            >
-              <div class="nav-title" class:unread={item.unread}>{item.title}</div>
-              <div class="nav-sub">{item.sub}</div>
-            </div>
+            <NavItem
+              {item}
+              {windowFocused}
+              selected={item.cursorIdx === activeCursor}
+              open={item.id === selectedEntry?.id && mode === MODE_ENTRIES}
+              bind:el={itemEls[item.cursorIdx]}
+              on:select={e => mode === MODE_FEEDS ? selectFeed(e.detail) : openArticle(e.detail)}
+            />
           {/if}
         {/each}
       {/if}
@@ -1204,58 +1195,6 @@
     right: 2px;
   }
 
-  .nav-feed-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    padding: 8px 14px 5px;
-    font-size: 12px;
-    font-weight: 400;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: #7aa2f7;
-    background: #24283b;
-    border-bottom: 1px solid #414868;
-
-    position: sticky;
-    top: 0;
-    z-index: 1;
-    cursor: default;
-    user-select: none;
-  }
-
-  .feed-header-title {
-    min-width: 0;
-    flex: 1;
-  }
-
-  .feed-header-count {
-    font-size: 10px;
-    color: #414868;
-    margin-left: 6px;
-    flex-shrink: 0;
-  }
-  .feed-header-sep {
-    font-size: 10px;
-    color: #414868;
-    margin-left: 6px;
-    flex-shrink: 0;
-  }
-
-  .feed-mark-read {
-    font-size: 10px;
-    font-family: inherit;
-    font-weight: 300;
-    letter-spacing: 0.02em;
-    text-transform: none;
-    color: #737aa2;
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-    flex-shrink: 0;
-  }
-  .feed-mark-read:hover { color: #f7768e; }
 
   .nav-empty {
     padding: 20px 14px;
@@ -1264,40 +1203,6 @@
   }
   .nav-error { color: #f7768e; }
 
-  .nav-item {
-    padding: 9px 14px 8px;
-    border-bottom: 1px solid #24283b;
-    cursor: pointer;
-    user-select: none;
-    transition: background 0.08s;
-  }
-  .nav-pane.window-focused .nav-item:hover { background: #24283b; }
-  .nav-item.selected .nav-title { color: #c0caf5; }
-  .nav-item.open { box-shadow: inset 5px 0 0 #73daca; }
-  .nav-item.open     .nav-title { color: #73daca; }
-
-  .nav-title {
-    font-size: 13px;
-    font-weight: 400;
-    line-height: 1.35;
-    color: #737aa2;
-    word-break: break-word;
-  }
-  .nav-title.unread {
-    font-weight: 400;
-    color: #c0caf5;
-  }
-
-  .nav-sub {
-    font-size: 11px;
-    color: #414868;
-    margin-top: 3px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .nav-item.selected .nav-sub { color: #7a89b8; }
-  .nav-item.open     .nav-sub { color: #6b7499; }
 
   .bottom-pad-mask {
     position: absolute;
