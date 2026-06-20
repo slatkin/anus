@@ -7,6 +7,7 @@
   import { EMPTY_SET, buildGroupedItems as _buildGroupedItems, buildGroupedCatItems as _buildGroupedCatItems } from './grouping.js';
   import { timeAgo, fullDate } from './utils/date.js';
   import { processContent, highlightTerms } from './utils/content.js';
+  import { showRead, sortOldest, grouped, groupedCats, showScrollbar, navWidth, navCollapsed, fontSize, collapsedFeeds, keptUnread } from './stores/preferences.js';
 
   const MODE_ENTRIES = 'entries';
   const MODE_FEEDS   = 'feeds';
@@ -61,11 +62,6 @@
   let _measureTimer = null;
   let _measureId = 0;
   let itemEls = [];
-  let showRead      = localStorage.getItem('showRead')      !== 'false';
-  let sortOldest    = localStorage.getItem('sortOldest')    === 'true';
-  let grouped       = localStorage.getItem('grouped')       !== 'false';
-  let groupedCats   = localStorage.getItem('groupedCats')   === 'true';
-  let showScrollbar = localStorage.getItem('showScrollbar') === 'true';
   let navPaneEl = null;
   let thumbTop = 0;
   let thumbHeight = 0;
@@ -100,37 +96,19 @@
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   }
-  let collapsedFeeds = new Set(JSON.parse(localStorage.getItem('collapsedFeeds') || '[]'));
-
-  $: localStorage.setItem('showRead',      String(showRead));
-  $: localStorage.setItem('sortOldest',    String(sortOldest));
-  $: localStorage.setItem('grouped',       String(grouped));
-  $: localStorage.setItem('groupedCats',   String(groupedCats));
-  $: localStorage.setItem('showScrollbar', String(showScrollbar));
-  $: localStorage.setItem('collapsedFeeds', JSON.stringify([...collapsedFeeds]));
-  let navWidth     = parseInt(localStorage.getItem('navWidth') || '300', 10);
-  let navCollapsed = localStorage.getItem('navCollapsed') === 'true';
-  let fontSize     = parseInt(localStorage.getItem('readerFontSize') || '16', 10);
-  let keptUnread = new Set(JSON.parse(localStorage.getItem('keptUnread') || '[]'));
-
-  $: localStorage.setItem('navWidth',       String(navWidth));
-  $: localStorage.setItem('navCollapsed',   String(navCollapsed));
-  $: localStorage.setItem('readerFontSize', String(fontSize));
-  $: localStorage.setItem('keptUnread', JSON.stringify([...keptUnread]));
-
   function toggleNav() {
-    navCollapsed = !navCollapsed;
+    $navCollapsed = !$navCollapsed;
   }
 
-  function increaseFontSize() { fontSize = Math.min(fontSize + 2, 28); }
-  function decreaseFontSize() { fontSize = Math.max(fontSize - 2, 10); }
+  function increaseFontSize() { $fontSize = Math.min($fontSize + 2, 28); }
+  function decreaseFontSize() { $fontSize = Math.max($fontSize - 2, 10); }
 
   function startNavResize(e) {
     e.preventDefault();
     const startX = e.clientX;
-    const startW = navWidth;
+    const startW = $navWidth;
     function onMove(ev) {
-      navWidth = Math.max(160, Math.min(600, startW + ev.clientX - startX));
+      $navWidth = Math.max(160, Math.min(600, startW + ev.clientX - startX));
     }
     function onUp() {
       window.removeEventListener('mousemove', onMove);
@@ -190,9 +168,9 @@
   $: { cols; page = 0; scheduleMeasure(); }
 
   // Remeasure on any layout-relevant change (including readability mode toggle).
-  $: if (selectedEntry) (readerWidth, fontSize, originalContent, scheduleMeasure());
+  $: if (selectedEntry) (readerWidth, $fontSize, originalContent, scheduleMeasure());
 
-  $: filteredEntries = showRead
+  $: filteredEntries = $showRead
     ? entries
     : entries.filter(e => e.status === 'unread' || e.id === selectedEntry?.id);
 
@@ -201,7 +179,7 @@
     if (pub !== 0) return pub;
     return new Date(b.fetched_at || 0) - new Date(a.fetched_at || 0);
   }
-  $: displayEntries = sortOldest
+  $: displayEntries = $sortOldest
     ? [...filteredEntries].sort((a, b) => -entryOrder(a, b))
     : [...filteredEntries].sort(entryOrder);
 
@@ -422,7 +400,7 @@
     if (idx < 0 || idx >= activeEntries.length) return;
 
     const prev = selectedEntry;
-    if (prev && prev.status === 'unread' && !keptUnread.has(prev.id)) {
+    if (prev && prev.status === 'unread' && !$keptUnread.has(prev.id)) {
       mutateEntry(prev.id, e => ({ ...e, status: 'read' }));
       MarkRead([prev.id]).catch(() => {});
     }
@@ -449,23 +427,23 @@
     mutateEntry(entry.id, e => ({ ...e, status: newStatus }));
     if (newStatus === 'read') {
       MarkRead([entry.id]).catch(() => {});
-      keptUnread.delete(entry.id); keptUnread = keptUnread;
+      $keptUnread.delete(entry.id); $keptUnread = $keptUnread;
       advanceToNextUnread();
     } else {
       MarkUnread([entry.id]).catch(() => {});
-      keptUnread.add(entry.id); keptUnread = keptUnread;
+      $keptUnread.add(entry.id); $keptUnread = $keptUnread;
     }
   }
 
   function handleMailClick() {
     if (!selectedEntry) return;
     if (selectedEntry.status === 'unread') {
-      if (keptUnread.has(selectedEntry.id)) keptUnread.delete(selectedEntry.id);
-      else keptUnread.add(selectedEntry.id);
-      keptUnread = keptUnread;
+      if ($keptUnread.has(selectedEntry.id)) $keptUnread.delete(selectedEntry.id);
+      else $keptUnread.add(selectedEntry.id);
+      $keptUnread = $keptUnread;
     } else {
-      keptUnread.add(selectedEntry.id);
-      keptUnread = keptUnread;
+      $keptUnread.add(selectedEntry.id);
+      $keptUnread = $keptUnread;
       mutateEntry(selectedEntry.id, e => ({ ...e, status: 'unread' }));
       MarkUnread([selectedEntry.id]).catch(() => {});
     }
@@ -480,7 +458,7 @@
   }
 
   function markAllRead() {
-    const ids = entries.filter(e => e.status === 'unread' && !keptUnread.has(e.id)).map(e => e.id);
+    const ids = entries.filter(e => e.status === 'unread' && !$keptUnread.has(e.id)).map(e => e.id);
     if (!ids.length) return;
     const idSet = new Set(ids);
     entries    = entries.map(e => idSet.has(e.id) ? { ...e, status: 'read' } : e);
@@ -490,7 +468,7 @@
   }
 
   function markFeedRead(feedId) {
-    const ids = entries.filter(e => e.feed_id === feedId && e.status === 'unread' && !keptUnread.has(e.id)).map(e => e.id);
+    const ids = entries.filter(e => e.feed_id === feedId && e.status === 'unread' && !$keptUnread.has(e.id)).map(e => e.id);
     if (!ids.length) return;
     const idSet = new Set(ids);
     entries    = entries.map(e => idSet.has(e.id) ? { ...e, status: 'read' } : e);
@@ -499,7 +477,7 @@
   }
 
   function markCatRead(catTitle) {
-    const ids = entries.filter(e => (e.feed.category?.title || 'All') === catTitle && e.status === 'unread' && !keptUnread.has(e.id)).map(e => e.id);
+    const ids = entries.filter(e => (e.feed.category?.title || 'All') === catTitle && e.status === 'unread' && !$keptUnread.has(e.id)).map(e => e.id);
     if (!ids.length) return;
     const idSet = new Set(ids);
     entries    = entries.map(e => idSet.has(e.id) ? { ...e, status: 'read' } : e);
@@ -508,7 +486,7 @@
   }
 
   async function toggleFeedCollapse(feedId) {
-    const isCollapsing = !collapsedFeeds.has(feedId);
+    const isCollapsing = !$collapsedFeeds.has(feedId);
 
     if (isCollapsing) {
       const headerIdx = displayItems.findIndex(i => i.type === 'header' && i.feedId === feedId);
@@ -522,8 +500,8 @@
         }
       }
 
-      collapsedFeeds.add(feedId);
-      collapsedFeeds = collapsedFeeds;
+      $collapsedFeeds.add(feedId);
+      $collapsedFeeds = $collapsedFeeds;
 
       if (nextCursorIdx !== null) {
         await tick();
@@ -531,8 +509,8 @@
         itemEls[nextCursorIdx]?.scrollIntoView({ block: 'start' });
       }
     } else {
-      collapsedFeeds.delete(feedId);
-      collapsedFeeds = collapsedFeeds;
+      $collapsedFeeds.delete(feedId);
+      $collapsedFeeds = $collapsedFeeds;
     }
   }
 
@@ -624,17 +602,17 @@
     if (!saved) return;
 
     // If the article is read but the "all" filter is off, enable it so it's visible.
-    if (saved.status === 'read' && !showRead) showRead = true;
+    if (saved.status === 'read' && !$showRead) $showRead = true;
 
     // If it's in a collapsed group, expand that group.
-    if (grouped) {
-      if (collapsedFeeds.has(saved.feed_id)) {
-        collapsedFeeds = new Set([...collapsedFeeds].filter(k => k !== saved.feed_id));
+    if ($grouped) {
+      if ($collapsedFeeds.has(saved.feed_id)) {
+        $collapsedFeeds = new Set([...$collapsedFeeds].filter(k => k !== saved.feed_id));
       }
-    } else if (groupedCats) {
+    } else if ($groupedCats) {
       const catKey = saved.feed?.category?.title || 'All';
-      if (collapsedFeeds.has(catKey)) {
-        collapsedFeeds = new Set([...collapsedFeeds].filter(k => k !== catKey));
+      if ($collapsedFeeds.has(catKey)) {
+        $collapsedFeeds = new Set([...$collapsedFeeds].filter(k => k !== catKey));
       }
     }
 
@@ -708,20 +686,20 @@
 
   $: activeCursor = mode === MODE_FEEDS ? feedCursor : cursor;
 
-  function buildGroupedItems(entries, collapsed = collapsedFeeds) {
+  function buildGroupedItems(entries, collapsed = $collapsedFeeds) {
     return _buildGroupedItems(entries, collapsed, timeAgo);
   }
 
-  function buildGroupedCatItems(entries, collapsed = collapsedFeeds) {
+  function buildGroupedCatItems(entries, collapsed = $collapsedFeeds) {
     return _buildGroupedCatItems(entries, collapsed, timeAgo);
   }
 
   $: displayItems, updateScrollThumb();
-  $: displayItems = (now, collapsedFeeds, sortOldest, showRead, grouped, groupedCats, searchResults,
+  $: displayItems = (now, $collapsedFeeds, $sortOldest, $showRead, $grouped, $groupedCats, searchResults,
     searchResults !== null
-      ? (grouped
+      ? ($grouped
           ? buildGroupedItems(searchResults, EMPTY_SET)
-          : groupedCats
+          : $groupedCats
           ? buildGroupedCatItems(searchResults, EMPTY_SET)
           : searchResults.map((e, idx) => ({
               type:      'item',
@@ -740,9 +718,9 @@
           sub:       `${f.unread} unread`,
           unread:    f.unread > 0,
         }))
-      : grouped
+      : $grouped
         ? buildGroupedItems(displayEntries)
-        : groupedCats
+        : $groupedCats
         ? buildGroupedCatItems(displayEntries)
         : displayEntries.map((e, idx) => ({
             type:      'item',
@@ -807,15 +785,15 @@
 
   <div class="body">
 
-  <div class="left-col" class:nav-collapsed={navCollapsed} style="width: {navCollapsed ? 'var(--collapsed-w)' : navWidth + 'px'}">
+  <div class="left-col" class:nav-collapsed={$navCollapsed} style="width: {$navCollapsed ? 'var(--collapsed-w)' : $navWidth + 'px'}">
 
-      <div class="toolbar toolbar-nav" class:nav-collapsed={navCollapsed}>
+      <div class="toolbar toolbar-nav" class:nav-collapsed={$navCollapsed}>
         <div class="nav-left">
           <div class="collapse-btn-wrap">
             <button class="nav-arrow-btn nav-collapse-btn"
                     on:click={toggleNav}
-                    title={navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
-              <div class="flip-icon" class:flipped={navCollapsed}>
+                    title={$navCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+              <div class="flip-icon" class:flipped={$navCollapsed}>
                 <div class="flip-front">
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                     <path d="M11.92,19.92L4,12l7.92-7.92l1.41,1.42L7.83,11H22v2H7.83l5.5,5.5L11.92,19.92M4,12V4H2v16h2V12z"/>
@@ -831,15 +809,15 @@
           </div>
         </div>
         <div class="toolbar-toggles nav-collapsible">
-          <button class="pill" class:active={showRead}   on:click={() => showRead   = !showRead}   title="Show or hide read articles">all</button>
-          <button class="pill" class:active={sortOldest} on:click={() => sortOldest = !sortOldest} title="Sort oldest first">oldest</button>
+          <button class="pill" class:active={$showRead}   on:click={() => $showRead   = !$showRead}   title="Show or hide read articles">all</button>
+          <button class="pill" class:active={$sortOldest} on:click={() => $sortOldest = !$sortOldest} title="Sort oldest first">oldest</button>
           <span class="pill-label">Group:</span>
-          <button class="pill" class:active={groupedCats} on:click={() => { groupedCats = !groupedCats; if (groupedCats) grouped = false; }} title="Group by category">tags</button>
-          <button class="pill" class:active={grouped}    on:click={() => { grouped = !grouped; if (grouped) groupedCats = false; }}    title="Group by feed">feeds</button>
+          <button class="pill" class:active={$groupedCats} on:click={() => { $groupedCats = !$groupedCats; if ($groupedCats) $grouped = false; }} title="Group by category">tags</button>
+          <button class="pill" class:active={$grouped}    on:click={() => { $grouped = !$grouped; if ($grouped) $groupedCats = false; }}    title="Group by feed">feeds</button>
         </div>
       </div>
 
-      {#if searchOpen && !navCollapsed}
+      {#if searchOpen && !$navCollapsed}
         <div class="search-bar" transition:fly={{ y: -20, duration: 150 }}>
           <input
             bind:this={searchInputEl}
@@ -857,9 +835,9 @@
         </div>
       {/if}
 
-      {#if (grouped || groupedCats) && !navCollapsed && searchResults === null}
+      {#if ($grouped || $groupedCats) && !$navCollapsed && searchResults === null}
         <div class="group-actions-bar">
-          <button class="pill" style="padding-right:0;gap:3px;display:flex;align-items:center" on:click={() => { collapsedFeeds = new Set(displayItems.filter(i => i.type === 'header').map(i => i.feedId)); }} title="Collapse all"><span style="position:relative;top:1px;display:flex"><ChevronsDownUp size={12}/></span>collapse</button><span style="color:#414868;font-size:11px;position:relative;top:-1px">/</span><button class="pill" style="padding-left:0;gap:3px;display:flex;align-items:center" on:click={() => { collapsedFeeds = new Set(); }} title="Expand all"><span style="position:relative;top:1px;display:flex"><ChevronsUpDown size={12}/></span>expand</button>
+          <button class="pill" style="padding-right:0;gap:3px;display:flex;align-items:center" on:click={() => { $collapsedFeeds = new Set(displayItems.filter(i => i.type === 'header').map(i => i.feedId)); }} title="Collapse all"><span style="position:relative;top:1px;display:flex"><ChevronsDownUp size={12}/></span>collapse</button><span style="color:#414868;font-size:11px;position:relative;top:-1px">/</span><button class="pill" style="padding-left:0;gap:3px;display:flex;align-items:center" on:click={() => { $collapsedFeeds = new Set(); }} title="Expand all"><span style="position:relative;top:1px;display:flex"><ChevronsUpDown size={12}/></span>expand</button>
         </div>
       {/if}
 
@@ -899,7 +877,7 @@
         {/each}
       {/if}
       </div><!-- /nav-pane -->
-      {#if showScrollbar && needsScroll}
+      {#if $showScrollbar && needsScroll}
         <div class="custom-scrollbar">
           <div class="custom-scrollbar-thumb"
             role="scrollbar"
@@ -936,7 +914,7 @@
         </div>
       </div>
 
-      {#if navCollapsed}
+      {#if $navCollapsed}
         <div class="collapsed-nav-btns">
           <button class="nav-arrow-btn" on:click={moveUp}   title="Previous (↑)">↑</button>
           <button class="nav-arrow-btn" on:click={moveDown} title="Next (↓)">↓</button>
@@ -945,7 +923,7 @@
 
   </div><!-- /left-col -->
 
-    <div class="splitter" role="separator" aria-label="Resize navigation panel" tabindex="0" class:hidden={navCollapsed} class:web={import.meta.env.VITE_API !== 'wails'} on:mousedown={startNavResize} on:keydown={e => (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && startNavResize(e)}></div>
+    <div class="splitter" role="separator" aria-label="Resize navigation panel" tabindex="0" class:hidden={$navCollapsed} class:web={import.meta.env.VITE_API !== 'wails'} on:mousedown={startNavResize} on:keydown={e => (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && startNavResize(e)}></div>
 
     <div class="reader-pane" bind:this={readerEl} bind:clientWidth={readerWidth}>
       {#if selectedEntry}
@@ -965,7 +943,7 @@
               <button class="ctrl-btn" on:click={increaseFontSize} title="Increase font size"><Plus size={13}/></button>
               <div class="ctrl-sep"></div>
               <button class="ctrl-btn"
-                      class:active={keptUnread.has(selectedEntry?.id)}
+                      class:active={$keptUnread.has(selectedEntry?.id)}
                       on:click={handleMailClick}
                       title={selectedEntry?.status === 'unread' ? 'Keep unread' : 'Mark as unread'}>
                 <EyeOff size={14}/>
@@ -973,7 +951,7 @@
               <button class="ctrl-btn" on:click={saveEntry} title="Save to Miniflux"><Bookmark size={14}/></button>
               <button class="ctrl-btn" on:click={openBrowser} title="Open in browser"><ExternalLink size={14}/></button>
             </div>
-            <div class="article-body" role="presentation" style="font-size: {fontSize}px" on:click={handleArticleClick} on:keydown={handleArticleClick} on:error|capture={handleArticleImgError}>
+            <div class="article-body" role="presentation" style="font-size: {$fontSize}px" on:click={handleArticleClick} on:keydown={handleArticleClick} on:error|capture={handleArticleImgError}>
               {@html articleHtml}
             </div>
           </div>
@@ -1011,7 +989,7 @@
       <div class="settings-body">
         <label class="settings-label settings-row">
           <span>Display scrollbar in feed list</span>
-          <button class="settings-toggle" class:on={showScrollbar} on:click={() => showScrollbar = !showScrollbar} role="switch" aria-checked={showScrollbar} aria-label="Display scrollbar in feed list"></button>
+          <button class="settings-toggle" class:on={$showScrollbar} on:click={() => $showScrollbar = !$showScrollbar} role="switch" aria-checked={$showScrollbar} aria-label="Display scrollbar in feed list"></button>
         </label>
         <label class="settings-label">
           <span>Cache expiry (days)</span>
