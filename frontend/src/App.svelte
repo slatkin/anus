@@ -1,8 +1,12 @@
 <script>
   import { onMount, onDestroy, tick } from 'svelte';
-  import { fade, fly } from 'svelte/transition';
   import { FetchCached, FetchEntries, RefreshAndFetch, ClearCache, FetchArticleContent, MarkRead, MarkUnread, ToggleStar, SaveEntry, SearchEntries, OpenURL, Show, GetConfig, SaveConfig } from './api.js';
-  import { BookOpen, Bookmark, ChevronsDownUp, ChevronsUpDown, ExternalLink, EyeOff, Minus, Plus, Search, Settings } from 'lucide-svelte';
+  import { ChevronsDownUp, ChevronsUpDown, Search, Settings } from 'lucide-svelte';
+  import Toast from './components/Toast.svelte';
+  import PageNav from './components/PageNav.svelte';
+  import SearchBar from './components/SearchBar.svelte';
+  import ReaderControls from './components/ReaderControls.svelte';
+  import SettingsModal from './components/SettingsModal.svelte';
   import { COL_PAD, COL_GAP, COL_PAD_TOP, COL_PAD_BOT, calcCols, calcColWidth, calcContentWidth, calcPageStride, calcTotalPages } from './paging.js';
   import { EMPTY_SET, buildGroupedItems as _buildGroupedItems, buildGroupedCatItems as _buildGroupedCatItems } from './grouping.js';
   import { timeAgo, fullDate } from './utils/date.js';
@@ -818,21 +822,14 @@
       </div>
 
       {#if searchOpen && !$navCollapsed}
-        <div class="search-bar" transition:fly={{ y: -20, duration: 150 }}>
-          <input
-            bind:this={searchInputEl}
-            bind:value={searchQuery}
-            on:input={onSearchInput}
-            on:keydown={e => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(searchDebounce); doSearch(); } else if (e.key === 'Escape') closeSearch(); }}
-            placeholder="Search…"
-            class="search-input"
-            style="color: {searchInputColor}"
-            type="search"
-          />
-          <button class="search-go-btn" on:click={doSearch} title="Search">
-            <Search size={14}/>
-          </button>
-        </div>
+        <SearchBar
+          bind:query={searchQuery}
+          bind:inputEl={searchInputEl}
+          inputColor={searchInputColor}
+          on:input={onSearchInput}
+          on:search={() => { clearTimeout(searchDebounce); doSearch(); }}
+          on:close={closeSearch}
+        />
       {/if}
 
       {#if ($grouped || $groupedCats) && !$navCollapsed && searchResults === null}
@@ -933,42 +930,25 @@
                style="width: {contentWidth}px; column-width: {colWidth}px; column-gap: {COL_GAP}px; padding: {COL_PAD_TOP}px {COL_PAD}px {COL_PAD_BOT}px; height: 100%; transform: translateX(-{page * pageStride}px)">
             <h1 class="article-title">{selectedEntry.title}</h1>
             <div class="article-meta">{selectedEntry.feed.title}{selectedEntry.feed.category?.title && selectedEntry.feed.category.title !== 'All' ? '  ·  ' + selectedEntry.feed.category.title : ''}  ·  {fullDate(selectedEntry.published_at)}{selectedEntry.fetched_at ? '  ·  Fetched ' + timeAgo(selectedEntry.fetched_at) : ''}</div>
-            <div class="reader-controls">
-              <button class="ctrl-btn" class:active={originalContent !== null} on:click={fetchOriginal} title="Readability mode">
-                <BookOpen size={14}/>
-              </button>
-              <div class="ctrl-sep"></div>
-              <button class="ctrl-btn" on:click={decreaseFontSize} title="Decrease font size"><Minus size={13}/></button>
-              <span class="ctrl-label">A</span>
-              <button class="ctrl-btn" on:click={increaseFontSize} title="Increase font size"><Plus size={13}/></button>
-              <div class="ctrl-sep"></div>
-              <button class="ctrl-btn"
-                      class:active={$keptUnread.has(selectedEntry?.id)}
-                      on:click={handleMailClick}
-                      title={selectedEntry?.status === 'unread' ? 'Keep unread' : 'Mark as unread'}>
-                <EyeOff size={14}/>
-              </button>
-              <button class="ctrl-btn" on:click={saveEntry} title="Save to Miniflux"><Bookmark size={14}/></button>
-              <button class="ctrl-btn" on:click={openBrowser} title="Open in browser"><ExternalLink size={14}/></button>
-            </div>
+            <ReaderControls
+              entry={selectedEntry}
+              originalActive={originalContent !== null}
+              keptUnread={$keptUnread}
+              on:fetchOriginal={fetchOriginal}
+              on:decreaseFontSize={decreaseFontSize}
+              on:increaseFontSize={increaseFontSize}
+              on:mailClick={handleMailClick}
+              on:save={saveEntry}
+              on:openBrowser={openBrowser}
+            />
             <div class="article-body" role="presentation" style="font-size: {$fontSize}px" on:click={handleArticleClick} on:keydown={handleArticleClick} on:error|capture={handleArticleImgError}>
               {@html articleHtml}
             </div>
           </div>
         </div>
         <div class="bottom-pad-mask"></div>
-        {#if toastVisible}
-          <div class="toast" transition:fade={{ duration: 150 }}>{toastMsg}</div>
-        {/if}
-        {#if totalPages > 1}
-          <div class="page-nav">
-            <button class="page-btn" disabled={page === 0}
-                    on:click={() => page--}>‹</button>
-            <span class="page-indicator">{page + 1} / {totalPages}</span>
-            <button class="page-btn" disabled={page === totalPages - 1}
-                    on:click={() => page++}>›</button>
-          </div>
-        {/if}
+        <Toast msg={toastMsg} visible={toastVisible} />
+        <PageNav bind:page totalPages={totalPages} />
       {:else}
         <div class="reader-empty">Select an article to read</div>
       {/if}
@@ -977,40 +957,14 @@
   </div><!-- /body -->
 
 {#if settingsOpen && settingsCfg}
-  <div class="settings-backdrop" role="presentation"
-    on:click|self={() => settingsOpen = false}
-    on:keydown={e => e.key === 'Escape' && (settingsOpen = false)}
-    transition:fade={{ duration: 150 }}>
-    <div class="settings-modal" transition:fly={{ y: 20, duration: 180 }}>
-      <div class="settings-header">
-        <span class="settings-title">Settings <span class="settings-version">v{__APP_VERSION__}</span></span>
-        <button class="settings-close" on:click={() => settingsOpen = false}>✕</button>
-      </div>
-      <div class="settings-body">
-        <label class="settings-label settings-row">
-          <span>Display scrollbar in feed list</span>
-          <button class="settings-toggle" class:on={$showScrollbar} on:click={() => $showScrollbar = !$showScrollbar} role="switch" aria-checked={$showScrollbar} aria-label="Display scrollbar in feed list"></button>
-        </label>
-        <label class="settings-label">
-          <span>Cache expiry (days)</span>
-          <input class="settings-input settings-input-sm" type="number" min="1" bind:value={settingsCfg.cache_expiry_days}/>
-        </label>
-        <label class="settings-label">
-          <span>Polling interval (minutes, 0 = off)</span>
-          <input class="settings-input settings-input-sm" type="number" min="0" bind:value={settingsCfg.polling_interval_minutes}/>
-        </label>
-      </div>
-      <div class="settings-footer">
-        <button class="settings-clear-cache" on:click={clearCache} disabled={settingsClearing}>
-          {settingsClearing ? 'Clearing…' : 'Clear cache'}
-        </button>
-        <button class="settings-save" on:click={saveSettings} disabled={settingsSaving}>
-          {settingsSaving ? 'Saving…' : 'Save'}
-        </button>
-      </div>
-
-    </div>
-  </div>
+  <SettingsModal
+    cfg={settingsCfg}
+    saving={settingsSaving}
+    clearing={settingsClearing}
+    on:close={() => settingsOpen = false}
+    on:save={saveSettings}
+    on:clearCache={clearCache}
+  />
 {/if}
 
 </div><!-- /app -->
@@ -1090,43 +1044,6 @@
     height: 38px;
   }
 
-  .search-bar {
-    display: flex;
-    align-items: stretch;
-    gap: 0;
-    padding: 6px 10px;
-    background: #1a1b26;
-    border-bottom: 1px solid #2a2b3d;
-  }
-  .search-input {
-    flex: 1;
-    min-width: 0;
-    background: #24283b;
-    border: 1px solid #414868;
-    border-right: none;
-    border-radius: 4px 0 0 4px;
-    color: #c0caf5;
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 300;
-    padding: 4px 8px;
-    outline: none;
-  }
-
-  .search-input::-webkit-search-cancel-button { display: none; }
-  .search-go-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    aspect-ratio: 1;
-    background: #24283b;
-    border: 1px solid #414868;
-    border-radius: 0 4px 4px 0;
-    color: #7aa2f7;
-    cursor: pointer;
-    padding: 0 4px;
-  }
-  .search-go-btn:hover { background: #2a2b3d; color: #c0caf5; }
 
   .nav-left { display: flex; gap: 2px; align-items: stretch; }
   .nav-ud-btns { display: flex; gap: 2px; }
@@ -1402,42 +1319,6 @@
     position: relative;
   }
 
-  .page-nav {
-    position: absolute;
-    bottom: 16px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: rgba(253, 246, 227, 0.85);
-    backdrop-filter: blur(4px);
-    border: 1px solid #d5c9a8;
-    border-radius: 20px;
-    padding: 4px 10px;
-    user-select: none;
-  }
-
-  .page-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 20px;
-    line-height: 1;
-    color: #8a7355;
-    padding: 0 4px;
-    transition: color 80ms, transform 80ms;
-  }
-  .page-btn:disabled { color: #c9b89a; cursor: default; }
-  .page-btn:not(:disabled):hover  { color: #3a2c1a; }
-  .page-btn:not(:disabled):active { color: #3a2c1a; transform: scale(0.85); }
-
-  .page-indicator {
-    font-size: 12px;
-    color: #7a6345;
-    min-width: 40px;
-    text-align: center;
-  }
 
   .reader-empty {
     display: flex;
@@ -1497,29 +1378,6 @@
     color: #9a7a58;
     margin-bottom: 0;
   }
-  .reader-controls {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 0;
-    margin-bottom: 20px;
-    border-top: 1px dotted #c4a882;
-    margin-top: 10px;
-  }
-  .ctrl-sep { width: 1px; height: 14px; background: #c4a882; margin: 0 2px; }
-  .ctrl-label { font-size: 13px; color: #9a7a58; font-weight: 600; line-height: 1; }
-  .ctrl-btn {
-    background: none;
-    border: none;
-    padding: 3px 4px;
-    color: #9a7a58;
-    cursor: pointer;
-    border-radius: 3px;
-    display: flex;
-    align-items: center;
-  }
-  .ctrl-btn:hover { background: #2a1f14; color: #c4a882; }
-  .ctrl-btn.active { background: #9a7a58; color: #fdf6e3; border-radius: 4px; }
 
   /* ── article body (global: rendered HTML) ── */
   .article-body :global(p) {
@@ -1650,23 +1508,6 @@
     line-height: 1.4;
   }
 
-  /* ── toast ── */
-  .toast {
-    position: absolute;
-    top: 16px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(36, 40, 59, 0.92);
-    backdrop-filter: blur(4px);
-    color: #c0caf5;
-    font-size: 13px;
-    padding: 8px 18px;
-    border-radius: 20px;
-    border: 1px solid #414868;
-    white-space: nowrap;
-    pointer-events: none;
-    z-index: 20;
-  }
 
   .toolbar-nav-bottom {
     border-top: 1px solid #414868;
@@ -1688,166 +1529,5 @@
   }
   .nav-bottom-right { display: flex; align-items: center; gap: 0; }
 
-  .settings-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.55);
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .settings-modal {
-    background: #1a1b26;
-    border: 1px solid #414868;
-    border-radius: 8px;
-    width: 420px;
-    max-width: 95vw;
-    max-height: 85vh;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-  }
-
-  .settings-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 16px;
-    border-bottom: 1px solid #414868;
-    flex-shrink: 0;
-  }
-
-  .settings-title {
-    font-size: 15px;
-    font-weight: 500;
-    color: #fdfdfd;
-    letter-spacing: 0.03em;
-  }
-
-  .settings-close {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: #737aa2;
-    font-size: 14px;
-    padding: 2px 6px;
-    border-radius: 4px;
-    transition: color 80ms, background 80ms;
-  }
-  .settings-close:hover { background: #24283b; color: #c0caf5; }
-
-  .settings-body {
-    overflow-y: auto;
-    padding: 14px 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    flex: 1;
-  }
-
-  .settings-label {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-size: 13px;
-    color: #fdfdfd;
-    letter-spacing: 0.02em;
-  }
-
-  .settings-row {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-
-
-  .settings-input {
-    background: #24283b;
-    border: 1px solid #414868;
-    border-radius: 4px;
-    color: #c0caf5;
-    font-family: inherit;
-    font-size: 14px;
-    padding: 6px 10px;
-    outline: none;
-    transition: border-color 120ms;
-  }
-  .settings-input:focus { border-color: #7aa2f7; }
-
-  .settings-input-sm { width: 80px; }
-
-  .settings-toggle {
-    position: relative;
-    width: 36px;
-    height: 20px;
-    border-radius: 10px;
-    border: none;
-    background: #414868;
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: background 150ms;
-    padding: 0;
-  }
-  .settings-toggle.on { background: #7aa2f7; }
-  .settings-toggle::after {
-    content: '';
-    position: absolute;
-    top: 3px;
-    left: 3px;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: #fdfdfd;
-    transition: transform 150ms;
-  }
-  .settings-toggle.on::after { transform: translateX(16px); }
-
-
-  .settings-footer {
-    padding: 10px 16px;
-    border-top: 1px solid #414868;
-    display: flex;
-    justify-content: space-between;
-    flex-shrink: 0;
-  }
-  .settings-version {
-    font-size: 11px;
-    font-weight: 400;
-    color: #414868;
-    margin-left: 6px;
-  }
-
-  .settings-save {
-    background: #2d3f76;
-    border: none;
-    border-radius: 4px;
-    color: #7aa2f7;
-    cursor: pointer;
-    font-family: inherit;
-    font-size: 14px;
-    font-weight: 500;
-    padding: 6px 18px;
-    transition: background 80ms, color 80ms;
-  }
-  .settings-save:hover:not(:disabled)  { background: #3d59a1; color: #c0caf5; }
-  .settings-save:disabled { opacity: 0.5; cursor: default; }
-
-  .settings-clear-cache {
-    background: transparent;
-    border: 1px solid #414868;
-    border-radius: 4px;
-    color: #565f89;
-    cursor: pointer;
-    font-family: inherit;
-    font-size: 14px;
-    font-weight: 500;
-    padding: 6px 18px;
-    transition: border-color 80ms, color 80ms;
-  }
-  .settings-clear-cache:hover:not(:disabled) { border-color: #7aa2f7; color: #7aa2f7; }
-  .settings-clear-cache:disabled { opacity: 0.5; cursor: default; }
 
 </style>
