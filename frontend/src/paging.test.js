@@ -8,6 +8,15 @@ import {
 const threshold2 = 2 * COL_PAD + 2 * COL_MIN + COL_GAP; // min width for 2 cols
 const threshold3 = 2 * COL_PAD + 3 * COL_MIN + 2 * COL_GAP; // min width for 3 cols
 
+// Simulate browser scrollWidth for a multicolumn element with N display-pages of content.
+// Browsers include the leading COL_PAD in scrollWidth but omit the trailing one when
+// content overflows horizontally. For exactly 1 page (no overflow) scrollWidth = contentWidth.
+function browserScrollWidth(cols, colWidth, totalPages) {
+  if (totalPages <= 1) return calcContentWidth(cols, colWidth);
+  const stride = calcPageStride(cols, colWidth);
+  return COL_PAD + totalPages * stride - COL_GAP;
+}
+
 describe('calcCols', () => {
   it('returns 1 for zero or negative width', () => {
     expect(calcCols(0)).toBe(1);
@@ -76,26 +85,27 @@ describe('calcContentWidth', () => {
 });
 
 describe('calcPageStride', () => {
-  it('equals clientWidth minus 2*PAD plus GAP', () => {
-    const clientWidth = 2 * COL_PAD + COL_MIN; // arbitrary valid width
-    expect(calcPageStride(clientWidth)).toBe(clientWidth - 2 * COL_PAD + COL_GAP);
+  it('equals cols*(colWidth+GAP)', () => {
+    expect(calcPageStride(1, COL_MIN)).toBe(1 * (COL_MIN + COL_GAP));
+    expect(calcPageStride(2, COL_MIN)).toBe(2 * (COL_MIN + COL_GAP));
+    expect(calcPageStride(3, 400)).toBe(3 * (400 + COL_GAP));
   });
 
-  it('equals cols*(colWidth+GAP) when columns exactly fill the layout', () => {
-    // 2 cols filling the 2-col threshold exactly.
+  it('matches the layout formula for multi-column', () => {
     const cols = 2;
     const colWidth = calcColWidth(threshold2, cols);
-    const contentWidth = calcContentWidth(cols, colWidth);
-    const stride = calcPageStride(contentWidth);
+    const stride = calcPageStride(cols, colWidth);
     expect(stride).toBe(cols * (colWidth + COL_GAP));
   });
 });
 
 describe('calcTotalPages', () => {
   it('returns 1 when content fits exactly in one page', () => {
-    const clientWidth = calcContentWidth(1, COL_MIN);
-    const pageStride = calcPageStride(clientWidth);
-    expect(calcTotalPages(clientWidth, pageStride)).toBe(1);
+    const cols = 1;
+    const colWidth = COL_MIN;
+    const stride = calcPageStride(cols, colWidth);
+    const scrollWidth = browserScrollWidth(cols, colWidth, 1);
+    expect(calcTotalPages(scrollWidth, stride)).toBe(1);
   });
 
   it('returns 1 for zero or negative pageStride', () => {
@@ -104,37 +114,36 @@ describe('calcTotalPages', () => {
   });
 
   it('returns 2 when content spans exactly two pages', () => {
-    const clientWidth = calcContentWidth(1, COL_MIN);
-    const pageStride = calcPageStride(clientWidth);
-    const scrollWidth = clientWidth + pageStride;
-    expect(calcTotalPages(scrollWidth, pageStride)).toBe(2);
+    const cols = 1;
+    const colWidth = COL_MIN;
+    const stride = calcPageStride(cols, colWidth);
+    const scrollWidth = browserScrollWidth(cols, colWidth, 2);
+    expect(calcTotalPages(scrollWidth, stride)).toBe(2);
   });
 
   it('a sliver of content on page N+1 still produces N+1 pages', () => {
-    const clientWidth = calcContentWidth(1, COL_MIN);
-    const pageStride = calcPageStride(clientWidth);
-    // raw ≈ 1.46 — Math.round would give 1; Math.ceil must give 2.
-    const sliverWidth = Math.round(pageStride * 0.46);
-    expect(calcTotalPages(clientWidth + sliverWidth, pageStride)).toBe(2);
+    const cols = 1;
+    const colWidth = COL_MIN;
+    const stride = calcPageStride(cols, colWidth);
+    // 1 full page + 46% of a second column
+    const scrollWidth = browserScrollWidth(cols, colWidth, 1) + Math.round(stride * 0.46);
+    expect(calcTotalPages(scrollWidth, stride)).toBe(2);
   });
 
   it('sub-pixel rounding does not create phantom extra pages', () => {
-    const clientWidth = calcContentWidth(1, COL_MIN);
-    const pageStride = calcPageStride(clientWidth);
-    // raw = 2.001 due to fp — must NOT become 3 pages.
-    const fpNoise = 2;
-    expect(calcTotalPages(clientWidth + pageStride + fpNoise, pageStride)).toBe(2);
+    const cols = 1;
+    const colWidth = COL_MIN;
+    const stride = calcPageStride(cols, colWidth);
+    // Exactly 2 pages + 2px FP noise — must NOT become 3.
+    const scrollWidth = browserScrollWidth(cols, colWidth, 2) + 2;
+    expect(calcTotalPages(scrollWidth, stride)).toBe(2);
   });
 
-  it('matches calcPageStride across multi-column layouts', () => {
+  it('works correctly for multi-column (2 cols) layout across 3 pages', () => {
     const cols = 2;
     const colWidth = calcColWidth(threshold2, cols);
-    const contentWidth = calcContentWidth(cols, colWidth);
-    const pageStride = calcPageStride(contentWidth);
-    expect(pageStride).toBe(cols * (colWidth + COL_GAP));
-
-    // 3 pages of content.
-    const scrollWidth = contentWidth + 2 * pageStride;
-    expect(calcTotalPages(scrollWidth, pageStride)).toBe(3);
+    const stride = calcPageStride(cols, colWidth);
+    const scrollWidth = browserScrollWidth(cols, colWidth, 3);
+    expect(calcTotalPages(scrollWidth, stride)).toBe(3);
   });
 });

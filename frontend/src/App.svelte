@@ -61,6 +61,7 @@
 
   let readerEl;
   let readerWidth = 0;
+  let readerHeight = 0;
   let contentEl;
   let page = 0;
   let totalPages = 1;
@@ -141,7 +142,7 @@
   // discrepancy between the values used in calculation and the values in the DOM.
   function applyMeasure() {
     if (!contentEl || !readerWidth) return;
-    pageStride = calcPageStride(contentEl.clientWidth);
+    pageStride = calcPageStride(cols, colWidth);
     if (pageStride <= 0) return;
     totalPages = calcTotalPages(contentEl.scrollWidth, pageStride);
     if (page >= totalPages) page = Math.max(0, totalPages - 1);
@@ -158,6 +159,8 @@
     const id = ++_measureId;
     await tick();
     if (id !== _measureId || !contentEl || !readerWidth) return;
+    // Await font loading so web fonts don't reflow columns after measurement.
+    if (document.fonts?.ready) await document.fonts.ready;
     // Double-RAF: gives browser time to complete CSS multi-column reflow.
     await new Promise(r => requestAnimationFrame(r));
     await new Promise(r => requestAnimationFrame(r));
@@ -173,8 +176,8 @@
   // Reset page immediately when column count changes (window resize crossed boundary).
   $: { cols; page = 0; scheduleMeasure(); }
 
-  // Remeasure on any layout-relevant change (including readability mode toggle).
-  $: if (selectedEntry) (readerWidth, $fontSize, originalContent, scheduleMeasure());
+  // Remeasure on any layout-relevant change (including readability mode toggle or vertical resize).
+  $: if (selectedEntry) (readerWidth, readerHeight, $fontSize, originalContent, scheduleMeasure());
 
   $: filteredEntries = $showRead
     ? entries
@@ -908,12 +911,12 @@
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_no_noninteractive_tabindex -->
     <div class="splitter" role="separator" aria-label="Resize navigation panel" aria-valuenow={$navWidth} aria-valuemin={160} aria-valuemax={600} tabindex="0" class:hidden={$navCollapsed} class:web={import.meta.env.VITE_API !== 'wails'} on:mousedown={startNavResize} on:keydown={e => (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && startNavResize(e)}></div>
 
-    <div class="reader-pane" bind:this={readerEl} bind:clientWidth={readerWidth}>
+    <div class="reader-pane" bind:this={readerEl} bind:clientWidth={readerWidth} bind:clientHeight={readerHeight}>
       {#if selectedEntry}
         <div class="reader-viewport" style="width: {contentWidth}px">
           <div class="reader-content"
                bind:this={contentEl}
-               style="width: {contentWidth}px; column-width: {colWidth}px; column-gap: {COL_GAP}px; padding: {COL_PAD_TOP}px {COL_PAD}px {COL_PAD_BOT}px; height: 100%; transform: translateX(-{page * pageStride}px)">
+               style="--col-h: {Math.max(0, readerHeight - COL_PAD_TOP - COL_PAD_BOT)}px; width: {contentWidth}px; column-width: {colWidth}px; column-gap: {COL_GAP}px; padding: {COL_PAD_TOP}px {COL_PAD}px {COL_PAD_BOT}px; height: 100%; transform: translateX(-{page * pageStride}px)">
             <h1 class="article-title">{selectedEntry.title}</h1>
             <div class="article-meta">{selectedEntry.feed.title}{selectedEntry.feed.category?.title && selectedEntry.feed.category.title !== 'All' ? '  ·  ' + selectedEntry.feed.category.title : ''}  ·  {fullDate(selectedEntry.published_at)}{selectedEntry.fetched_at ? '  ·  Fetched ' + timeAgo(selectedEntry.fetched_at) : ''}</div>
             <ReaderControls
@@ -1282,6 +1285,11 @@
   }
 
   /* ── article body (global: rendered HTML) ── */
+  .article-body {
+    overflow-wrap: break-word;
+    hyphens: auto;
+  }
+
   .article-body :global(p) {
     font-size: inherit;
     line-height: 1.75;
@@ -1296,7 +1304,9 @@
 
   .article-body :global(img) {
     max-width: 75%;
+    max-height: var(--col-h);
     height: auto;
+    object-fit: contain;
     display: block;
     margin: 1.2em auto;
     border-radius: 4px;
@@ -1368,6 +1378,10 @@
     width: 100%;
     margin: 1.2em 0;
     font-size: 14px;
+    break-inside: avoid;
+    max-height: var(--col-h);
+    display: block;
+    overflow-x: auto;
   }
   .article-body :global(th),
   .article-body :global(td) {
@@ -1377,7 +1391,7 @@
   }
   .article-body :global(th) { background: #f0e4c8; font-weight: 700; }
 
-  .article-body :global(figure) { margin: 1.2em auto; max-width: 85%; }
+  .article-body :global(figure) { margin: 1.2em auto; max-width: 85%; max-height: var(--col-h); }
 
   .article-body :global(.yt-thumb) {
     display: block;
