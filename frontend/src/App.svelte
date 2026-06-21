@@ -268,7 +268,8 @@
       }
       if (!selectedEntry && entries.length > 0) {
         await tick();
-        openArticle(0);
+        const firstUnread = activeEntries.findIndex(e => e.status === 'unread');
+        openArticle(firstUnread !== -1 ? firstUnread : 0);
       }
     } catch (e) {
       error      = String(e);
