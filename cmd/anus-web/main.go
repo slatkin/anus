@@ -7,10 +7,8 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 
-	"github.com/BurntSushi/toml"
 	"github.com/slatkin/anus/internal/cache"
 	"github.com/slatkin/anus/pkg/app"
 	"github.com/slatkin/anus/pkg/config"
@@ -171,17 +169,7 @@ func registerAPI(mux *http.ServeMux, a *app.App, cfg config.Config) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		f, err := os.Create(path)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		defer f.Close()
-		if err := toml.NewEncoder(f).Encode(incoming); err != nil {
+		if err := config.Save(incoming, path); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

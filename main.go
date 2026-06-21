@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/BurntSushi/toml"
 	"github.com/pkg/browser"
 	"github.com/slatkin/anus/frontend"
 	"github.com/slatkin/anus/internal/cache"
@@ -67,12 +66,7 @@ func (a *App) SaveConfig(cfg config.Config) error {
 	if err != nil {
 		return err
 	}
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if err := toml.NewEncoder(f).Encode(cfg); err != nil {
+	if err := config.Save(cfg, path); err != nil {
 		return err
 	}
 	a.cfg = cfg
