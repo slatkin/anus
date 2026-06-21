@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"sort"
 	"sync"
 	"time"
@@ -153,7 +154,9 @@ func (a *App) FetchEntries() (*FetchResult, error) {
 				merged[i].FetchedAt = now
 			}
 		}
-		_ = a.cache.Put(merged[:len(fresh)])
+		if err := a.cache.Put(merged[:len(fresh)]); err != nil {
+			log.Printf("cache Put: %v", err)
+		}
 		var toReCache []miniflux.FeedEntry
 		for _, e := range cached {
 			if !freshSet[e.ID] {
@@ -169,7 +172,9 @@ func (a *App) FetchEntries() (*FetchResult, error) {
 			}
 		}
 		if len(toReCache) > 0 {
-			_ = a.cache.Put(toReCache)
+			if err := a.cache.Put(toReCache); err != nil {
+				log.Printf("cache Put: %v", err)
+			}
 		}
 	}
 
@@ -237,7 +242,9 @@ func (a *App) FetchArticleContent(id int, url string) (string, error) {
 func (a *App) MarkRead(ids []int) error {
 	if a.cache != nil {
 		for _, id := range ids {
-			_ = a.cache.Update(id, func(e *miniflux.FeedEntry) { e.Status = miniflux.ReadStatusRead })
+			if err := a.cache.Update(id, func(e *miniflux.FeedEntry) { e.Status = miniflux.ReadStatusRead }); err != nil {
+				log.Printf("cache Update: %v", err)
+			}
 		}
 	}
 	return a.client.ChangeEntryReadStatus(ids, miniflux.ReadStatusRead)
@@ -246,7 +253,9 @@ func (a *App) MarkRead(ids []int) error {
 func (a *App) MarkUnread(ids []int) error {
 	if a.cache != nil {
 		for _, id := range ids {
-			_ = a.cache.Update(id, func(e *miniflux.FeedEntry) { e.Status = miniflux.ReadStatusUnread })
+			if err := a.cache.Update(id, func(e *miniflux.FeedEntry) { e.Status = miniflux.ReadStatusUnread }); err != nil {
+				log.Printf("cache Update: %v", err)
+			}
 		}
 	}
 	return a.client.ChangeEntryReadStatus(ids, miniflux.ReadStatusUnread)
@@ -254,7 +263,9 @@ func (a *App) MarkUnread(ids []int) error {
 
 func (a *App) ToggleStar(id int) error {
 	if a.cache != nil {
-		_ = a.cache.Update(id, func(e *miniflux.FeedEntry) { e.Starred = !e.Starred })
+		if err := a.cache.Update(id, func(e *miniflux.FeedEntry) { e.Starred = !e.Starred }); err != nil {
+			log.Printf("cache Update: %v", err)
+		}
 	}
 	return a.client.ToggleStarred(id)
 }
