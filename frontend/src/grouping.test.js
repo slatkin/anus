@@ -1,7 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { EMPTY_SET, buildGroupedItems, buildGroupedCatItems } from './grouping.js';
+import { EMPTY_SET, catKey, buildGroupedItems, buildGroupedCatItems } from './grouping.js';
 
 // ── fixtures ──────────────────────────────────────────────────────────────
+
+// Stable, deterministic category id per title (Miniflux always provides category.id).
+const _catIds = new Map();
+function catId(title) {
+  if (!_catIds.has(title)) _catIds.set(title, _catIds.size + 1);
+  return _catIds.get(title);
+}
 
 function makeEntry(id, feedId, feedTitle, cat, opts = {}) {
   return {
@@ -13,7 +20,7 @@ function makeEntry(id, feedId, feedTitle, cat, opts = {}) {
     published_at: opts.published_at ?? '2024-01-01T00:00:00Z',
     feed: {
       title: feedTitle,
-      category: cat ? { title: cat } : null,
+      category: cat ? { id: catId(cat), title: cat } : null,
     },
   };
 }
@@ -29,7 +36,7 @@ describe('buildGroupedItems', () => {
     const entries = [makeEntry(1, 10, 'Feed A', null)];
     const items = buildGroupedItems(entries, EMPTY_SET);
     expect(items).toHaveLength(2);
-    expect(items[0]).toMatchObject({ type: 'header', title: 'Feed A', feedId: 10, count: 1, collapsed: false });
+    expect(items[0]).toMatchObject({ type: 'header', title: 'Feed A', feedId: 'feed:10', count: 1, collapsed: false });
     expect(items[1]).toMatchObject({ type: 'item', id: 1, cursorIdx: 0 });
   });
 
@@ -42,9 +49,9 @@ describe('buildGroupedItems', () => {
     const items = buildGroupedItems(entries, EMPTY_SET);
     const headers = items.filter(i => i.type === 'header');
     expect(headers).toHaveLength(2);
-    const feedAHeader = headers.find(h => h.feedId === 10);
+    const feedAHeader = headers.find(h => h.feedId === 'feed:10');
     expect(feedAHeader.count).toBe(2);
-    const feedBHeader = headers.find(h => h.feedId === 20);
+    const feedBHeader = headers.find(h => h.feedId === 'feed:20');
     expect(feedBHeader.count).toBe(1);
   });
 
@@ -78,7 +85,7 @@ describe('buildGroupedItems', () => {
       makeEntry(1, 10, 'Feed A', null),
       makeEntry(2, 10, 'Feed A', null),
     ];
-    const collapsed = new Set([10]);
+    const collapsed = new Set(['feed:10']);
     const items = buildGroupedItems(entries, collapsed);
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ type: 'header', collapsed: true, count: 2 });
@@ -109,7 +116,7 @@ describe('buildGroupedItems', () => {
 
   it('passes EMPTY_SET so all groups expand regardless of outer collapsed state', () => {
     const entries = [makeEntry(1, 10, 'Feed A', null)];
-    const collapsed = new Set([10]);
+    const collapsed = new Set(['feed:10']);
     // With real collapsed set → collapsed
     expect(buildGroupedItems(entries, collapsed)).toHaveLength(1);
     // With EMPTY_SET → expanded
@@ -140,7 +147,7 @@ describe('buildGroupedCatItems', () => {
   it('falls back to "All" for entries with no category', () => {
     const entries = [makeEntry(1, 10, 'Feed A', null)];
     const items = buildGroupedCatItems(entries, EMPTY_SET);
-    expect(items[0]).toMatchObject({ type: 'header', title: 'All', feedId: 'All' });
+    expect(items[0]).toMatchObject({ type: 'header', title: 'All', feedId: 'cat:0' });
   });
 
   it('sorts category headers alphabetically', () => {
@@ -155,18 +162,18 @@ describe('buildGroupedCatItems', () => {
     expect(headers).toEqual(['Alpha', 'Mango', 'Zebra']);
   });
 
-  it('uses category title as feedId key on headers', () => {
+  it('uses a stable category-id key on headers', () => {
     const entries = [makeEntry(1, 10, 'Feed A', 'News')];
     const header = buildGroupedCatItems(entries, EMPTY_SET)[0];
-    expect(header.feedId).toBe('News');
+    expect(header.feedId).toBe(catKey(entries[0]));
   });
 
-  it('collapses a category group when its title is in the collapsed set', () => {
+  it('collapses a category group when its key is in the collapsed set', () => {
     const entries = [
       makeEntry(1, 10, 'Feed A', 'Tech'),
       makeEntry(2, 20, 'Feed B', 'Tech'),
     ];
-    const collapsed = new Set(['Tech']);
+    const collapsed = new Set([catKey(entries[0])]);
     const items = buildGroupedCatItems(entries, collapsed);
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ type: 'header', collapsed: true, count: 2 });

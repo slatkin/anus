@@ -1,14 +1,20 @@
 export const EMPTY_SET = new Set();
 
+// Namespaced, stable collapse keys. Feed keys can never collide with category keys,
+// so each grouping mode keeps independent collapse state in the shared set.
+export const feedKey = (e) => 'feed:' + e.feed_id;
+export const catKey  = (e) => 'cat:'  + (e.feed.category?.id ?? 0); // 0 = uncategorized
+
 export function buildGroupedItems(entries, collapsed, timeAgo = () => '') {
   const byFeed = new Map();
   const order = [];
   entries.forEach((e, idx) => {
-    if (!byFeed.has(e.feed_id)) {
-      byFeed.set(e.feed_id, { title: e.feed.title, rows: [] });
-      order.push(e.feed_id);
+    const key = feedKey(e);
+    if (!byFeed.has(key)) {
+      byFeed.set(key, { title: e.feed.title, rows: [] });
+      order.push(key);
     }
-    byFeed.get(e.feed_id).rows.push({
+    byFeed.get(key).rows.push({
       type:      'item',
       cursorIdx: idx,
       id:        e.id,
@@ -32,9 +38,9 @@ export function buildGroupedCatItems(entries, collapsed, timeAgo = () => '') {
   const byCat = new Map();
   const order = [];
   entries.forEach((e, idx) => {
-    const catTitle = e.feed.category?.title || 'All';
-    if (!byCat.has(catTitle)) { byCat.set(catTitle, { title: catTitle, rows: [] }); order.push(catTitle); }
-    byCat.get(catTitle).rows.push({
+    const key = catKey(e);
+    if (!byCat.has(key)) { byCat.set(key, { title: e.feed.category?.title || 'All', rows: [] }); order.push(key); }
+    byCat.get(key).rows.push({
       type:      'item',
       cursorIdx: idx,
       id:        e.id,
@@ -43,7 +49,7 @@ export function buildGroupedCatItems(entries, collapsed, timeAgo = () => '') {
       unread:    e.status === 'unread',
     });
   });
-  order.sort((a, b) => a.localeCompare(b));
+  order.sort((a, b) => byCat.get(a).title.localeCompare(byCat.get(b).title));
   const out = [];
   for (const key of order) {
     const { title, rows } = byCat.get(key);

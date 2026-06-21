@@ -10,7 +10,7 @@
   import ReaderControls from './components/ReaderControls.svelte';
   import SettingsModal from './components/SettingsModal.svelte';
   import { COL_PAD, COL_GAP, COL_PAD_TOP, COL_PAD_BOT, calcCols, calcColWidth, calcContentWidth, calcPageStride, calcTotalPages } from './paging.js';
-  import { EMPTY_SET, buildGroupedItems as _buildGroupedItems, buildGroupedCatItems as _buildGroupedCatItems } from './grouping.js';
+  import { EMPTY_SET, feedKey, catKey, buildGroupedItems as _buildGroupedItems, buildGroupedCatItems as _buildGroupedCatItems } from './grouping.js';
   import { timeAgo, fullDate } from './utils/date.js';
   import { processContent, highlightTerms } from './utils/content.js';
   import { showRead, sortOldest, grouped, groupedCats, showScrollbar, navWidth, navCollapsed, fontSize, collapsedFeeds, keptUnread } from './stores/preferences.js';
@@ -358,7 +358,16 @@
     advanceToNextUnread();
   }
 
+  // Expand the collapsed group containing an entry so it can be scrolled to / shown.
+  function expandGroupFor(entry) {
+    if (!entry) return;
+    const k = $grouped ? feedKey(entry) : $groupedCats ? catKey(entry) : null;
+    if (k && $collapsedFeeds.has(k))
+      $collapsedFeeds = new Set([...$collapsedFeeds].filter(x => x !== k));
+  }
+
   async function scrollCursorIntoView() {
+    if (mode === MODE_ENTRIES) expandGroupFor(activeEntries[cursor]);
     await tick();
     itemEls[cursor]?.scrollIntoView({ block: 'nearest' });
   }
@@ -605,16 +614,7 @@
     if (saved.status === 'read' && !$showRead) $showRead = true;
 
     // If it's in a collapsed group, expand that group.
-    if ($grouped) {
-      if ($collapsedFeeds.has(saved.feed_id)) {
-        $collapsedFeeds = new Set([...$collapsedFeeds].filter(k => k !== saved.feed_id));
-      }
-    } else if ($groupedCats) {
-      const catKey = saved.feed?.category?.title || 'All';
-      if ($collapsedFeeds.has(catKey)) {
-        $collapsedFeeds = new Set([...$collapsedFeeds].filter(k => k !== catKey));
-      }
-    }
+    expandGroupFor(saved);
 
     await tick();
 
@@ -905,7 +905,8 @@
 
   </div><!-- /left-col -->
 
-    <div class="splitter" role="separator" aria-label="Resize navigation panel" tabindex="0" class:hidden={$navCollapsed} class:web={import.meta.env.VITE_API !== 'wails'} on:mousedown={startNavResize} on:keydown={e => (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && startNavResize(e)}></div>
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_no_noninteractive_tabindex -->
+    <div class="splitter" role="separator" aria-label="Resize navigation panel" aria-valuenow={$navWidth} aria-valuemin={160} aria-valuemax={600} tabindex="0" class:hidden={$navCollapsed} class:web={import.meta.env.VITE_API !== 'wails'} on:mousedown={startNavResize} on:keydown={e => (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && startNavResize(e)}></div>
 
     <div class="reader-pane" bind:this={readerEl} bind:clientWidth={readerWidth}>
       {#if selectedEntry}
