@@ -1,5 +1,17 @@
 import { writable } from 'svelte/store';
 
+const PREFS_VERSION = 1;
+const PREFS_KEYS = [
+  'showRead', 'sortOldest', 'grouped', 'groupedCats', 'showScrollbar',
+  'navWidth', 'navCollapsed', 'readerFontSize', 'collapsedFeeds', 'keptUnread',
+];
+
+const storedVersion = parseInt(localStorage.getItem('prefs_version') || '0', 10);
+if (storedVersion < PREFS_VERSION) {
+  for (const key of PREFS_KEYS) localStorage.removeItem(key);
+  localStorage.setItem('prefs_version', String(PREFS_VERSION));
+}
+
 function persisted(key, defaultValue, parse = v => v) {
   const raw = localStorage.getItem(key);
   const initial = raw !== null ? parse(raw) : defaultValue;
