@@ -155,7 +155,9 @@ func registerAPI(mux *http.ServeMux, a *app.App, cfg config.Config) {
 	})
 
 	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, cfg)
+		safe := cfg
+		safe.ApiKey = ""
+		writeJSON(w, safe)
 	})
 
 	mux.HandleFunc("POST /api/config", func(w http.ResponseWriter, r *http.Request) {

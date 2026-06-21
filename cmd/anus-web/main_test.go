@@ -253,6 +253,9 @@ func TestGetConfig_200(t *testing.T) {
 	if got.ServerUrl != cfg.ServerUrl {
 		t.Errorf("server_url: got %q, want %q", got.ServerUrl, cfg.ServerUrl)
 	}
+	if got.ApiKey != "" {
+		t.Errorf("api_key should be empty in response, got %q", got.ApiKey)
+	}
 }
 
 func TestPostConfig_204AndPersists(t *testing.T) {
