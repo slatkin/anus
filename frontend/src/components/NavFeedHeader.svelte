@@ -34,6 +34,9 @@
   .feed-header-title {
     min-width: 0;
     flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .feed-header-count {
     font-size: 10px;
