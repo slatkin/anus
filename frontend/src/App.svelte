@@ -969,6 +969,8 @@
     overflow: hidden;
     font-family: 'Lexend Deca', system-ui, sans-serif;
     font-weight: 300;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
   :global(#app) { height: 100%; }
