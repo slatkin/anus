@@ -1,38 +1,45 @@
+const TIMEOUT_MS = 15000;
+
+function signal() {
+  return AbortSignal.timeout(TIMEOUT_MS);
+}
+
 async function post(path, body) {
   const res = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal: signal(),
   });
   if (!res.ok) throw new Error(await res.text());
 }
 
 export async function FetchCached() {
-  const res = await fetch('/api/cached');
+  const res = await fetch('/api/cached', { signal: signal() });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
 export async function FetchEntries() {
-  const res = await fetch('/api/entries');
+  const res = await fetch('/api/entries', { signal: signal() });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
 export async function RefreshAndFetch() {
-  const res = await fetch('/api/refresh-and-fetch', { method: 'POST' });
+  const res = await fetch('/api/refresh-and-fetch', { method: 'POST', signal: signal() });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
 export async function ClearCache() {
-  const res = await fetch('/api/clear-cache', { method: 'POST' });
+  const res = await fetch('/api/clear-cache', { method: 'POST', signal: signal() });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
 export async function FetchArticleContent(id, url) {
-  const res = await fetch(`/api/fetch-content?id=${id}&url=${encodeURIComponent(url)}`);
+  const res = await fetch(`/api/fetch-content?id=${id}&url=${encodeURIComponent(url)}`, { signal: signal() });
   if (!res.ok) throw new Error(await res.text());
   const data = await res.json();
   return data.content;
@@ -55,7 +62,7 @@ export async function SaveEntry(id) {
 }
 
 export async function SearchEntries(query) {
-  const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+  const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`, { signal: signal() });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
@@ -67,7 +74,7 @@ export function OpenURL(url) {
 export function Show() {}
 
 export async function GetConfig() {
-  const res = await fetch('/api/config');
+  const res = await fetch('/api/config', { signal: signal() });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
