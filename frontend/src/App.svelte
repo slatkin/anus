@@ -155,6 +155,94 @@
     });
   }
 
+  // An unbreakable figure/image that doesn't fit at the bottom of a column jumps whole to
+  // the next column, leaving a gap. With sequential column-fill the text before it fills
+  // the prior column independently of the media's size, so the leftover gap is stable —
+  // shrinking the media to fit it pulls the block back up. Single pass, bounded by a
+  // min-scale floor so we never shrink media into a postage stamp.
+  const FIT_FLOOR   = 0.75;  // don't shrink media below this fraction of its fitted height
+  const FIT_MIN_GAP = 80;    // ignore trivial gaps (px)
+  const FIT_FUDGE   = 8;     // small px cushion so the refit reliably clears the gap
+
+  async function fitColumnFigures(id) {
+    const body = contentEl?.querySelector('.article-body');
+    if (!body) return;
+
+    // The block that flows in the column is the media's top-level ancestor under body.
+    const topBlock = (el) => {
+      let n = el;
+      while (n.parentElement && n.parentElement !== body) n = n.parentElement;
+      return n;
+    };
+
+    // Candidate media: figures and bare images, keyed by their flow block.
+    const seen = new Set();
+    const candidates = [];
+    for (const img of body.querySelectorAll('img')) {
+      const block = topBlock(img.closest('figure') ?? img);
+      if (seen.has(block)) continue;
+      seen.add(block);
+      candidates.push({ block, img });
+    }
+    if (!candidates.length) return;
+
+    // Reset to baseline so the pass is idempotent (recompute from natural size each run).
+    let reset = false;
+    for (const { img } of candidates) {
+      if (img.style.maxHeight) { img.style.maxHeight = ''; reset = true; }
+    }
+    if (reset) {
+      await new Promise(r => requestAnimationFrame(r));
+      if (id !== _measureId) return;
+    }
+
+    const colContentH = readerHeight - COL_PAD_TOP - COL_PAD_BOT;
+    if (colContentH <= 0) return;
+    const colBottom = COL_PAD_TOP + colContentH;
+    const base   = contentEl.getBoundingClientRect();
+    const stride = colWidth + COL_GAP;
+    const colOf  = (left) => Math.round((left - base.left - COL_PAD) / stride);
+    const children = [...body.children];
+
+    for (const { block, img } of candidates) {
+      const br     = block.getBoundingClientRect();
+      const figCol = colOf(br.left);
+      if (figCol <= 0) continue;
+
+      // Block must start its column (its previous sibling lives in an earlier column).
+      const prev = block.previousElementSibling;
+      let prevMaxCol = -1;
+      if (prev) for (const rect of prev.getClientRects()) prevMaxCol = Math.max(prevMaxCol, colOf(rect.left));
+      if (prevMaxCol >= figCol) continue;
+
+      // Last content bottom in the previous column (handles fragmented blocks via getClientRects).
+      const prevCol = figCol - 1;
+      let lastBottom = -Infinity;
+      for (const child of children) {
+        if (child === block) break;
+        for (const rect of child.getClientRects()) {
+          if (colOf(rect.left) === prevCol) lastBottom = Math.max(lastBottom, rect.bottom - base.top);
+        }
+      }
+      if (lastBottom === -Infinity) continue;
+      const gap = colBottom - lastBottom;
+      if (gap < FIT_MIN_GAP) continue;
+
+      const imgH      = img.getBoundingClientRect().height;
+      const blockH    = br.height;
+      // Overhead the image must share the gap with: caption + internal spacing (blockH-imgH)
+      // PLUS the block's own top+bottom margins (outside the border box) + a small cushion.
+      const cs        = getComputedStyle(block);
+      const margins   = parseFloat(cs.marginTop) + parseFloat(cs.marginBottom);
+      const overhead  = (blockH - imgH) + margins + FIT_FUDGE;
+      const targetImgH = gap - overhead;
+      if (targetImgH >= imgH)            continue;
+      if (targetImgH < imgH * FIT_FLOOR) continue;
+      img.style.maxHeight = Math.floor(targetImgH) + 'px';
+    }
+    await new Promise(r => requestAnimationFrame(r));  // let the shrink reflow settle
+  }
+
   async function measurePages() {
     const id = ++_measureId;
     await tick();
@@ -164,6 +252,9 @@
     // Double-RAF: gives browser time to complete CSS multi-column reflow.
     await new Promise(r => requestAnimationFrame(r));
     await new Promise(r => requestAnimationFrame(r));
+    if (id !== _measureId || !contentEl || !readerWidth) return;
+
+    await fitColumnFigures(id);
     if (id !== _measureId || !contentEl || !readerWidth) return;
 
     applyMeasure();
