@@ -242,10 +242,6 @@
       entries    = filterByFeed(allEntries, filterFeedID);
       loading    = false;
       refreshStatus();
-      await tick();
-      const savedId  = parseInt(localStorage.getItem('lastArticleId') || '0', 10);
-      const savedIdx = savedId ? displayEntries.findIndex(e => e.id === savedId) : -1;
-      if (savedIdx !== -1) openArticle(savedIdx);
     } catch (_) {
       // cache unavailable — fall through to live fetch
     }
@@ -272,9 +268,7 @@
       }
       if (!selectedEntry && entries.length > 0) {
         await tick();
-        const savedId  = parseInt(localStorage.getItem('lastArticleId') || '0', 10);
-        const savedIdx = savedId ? displayEntries.findIndex(e => e.id === savedId) : -1;
-        openArticle(savedIdx !== -1 ? savedIdx : 0);
+        openArticle(0);
       }
     } catch (e) {
       error      = String(e);
@@ -417,7 +411,6 @@
     selectedEntry    = activeEntries[idx];
     originalContent  = null;
     fetchingOriginal = false;
-    localStorage.setItem('lastArticleId', String(selectedEntry.id));
     page       = 0;
     totalPages = 1;
     scrollCursorIntoView();
