@@ -516,6 +516,7 @@
     originalContent  = null;
     fetchingOriginal = false;
     page       = 0;
+    if (readerEl) readerEl.scrollTop = 0;
     totalPages = 1;
     scrollCursorIntoView();
     refreshStatus();
