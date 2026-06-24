@@ -1,5 +1,6 @@
 <script>
   import { createEventDispatcher } from 'svelte';
+  import { BookCheck } from 'lucide-svelte';
   export let item;
   const dispatch = createEventDispatcher();
 </script>
@@ -10,6 +11,10 @@
   on:keydown={e => e.key === 'Enter' && dispatch('collapse', item.feedId)}>
   <span class="feed-header-title">{item.title}</span>
   {#if item.count != null}<span class="feed-header-count">{item.count}</span>{/if}
+  <button class="feed-header-markread" title="Mark all read"
+    on:click|stopPropagation={() => dispatch('markread', item.feedId)}>
+    <BookCheck size={14} />
+  </button>
 </div>
 
 <style>
@@ -38,9 +43,29 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .feed-header-markread {
+    margin-left: 8px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: inherit;
+    opacity: 0.6;
+    transition: opacity 0.1s, transform 0.1s;
+  }
+  .feed-header-markread:hover {
+    opacity: 1;
+  }
+  .feed-header-markread:active {
+    transform: scale(0.85);
+    opacity: 1;
+  }
   .feed-header-count {
     font-size: 10px;
-    color: #414868;
+    color: #a9b1d6;
     margin-left: 6px;
     flex-shrink: 0;
   }

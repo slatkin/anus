@@ -463,7 +463,17 @@
   async function scrollCursorIntoView() {
     if (mode === MODE_ENTRIES) expandGroupFor(activeEntries[cursor]);
     await tick();
-    itemEls[cursor]?.scrollIntoView({ block: 'nearest' });
+    const el = itemEls[cursor];
+    if (!el || !navPaneEl) return;
+    const elRect   = el.getBoundingClientRect();
+    const paneRect = navPaneEl.getBoundingClientRect();
+    const headerH  = navPaneEl.querySelector('.nav-feed-header')?.offsetHeight ?? 0;
+    const topBound = paneRect.top + headerH;
+    if (elRect.top < topBound) {
+      navPaneEl.scrollTop -= topBound - elRect.top;
+    } else if (elRect.bottom > paneRect.bottom) {
+      navPaneEl.scrollTop += elRect.bottom - paneRect.bottom;
+    }
   }
 
   function selectCurrent() {
@@ -610,7 +620,15 @@
       if (nextCursorIdx !== null) {
         await tick();
         await new Promise(r => requestAnimationFrame(r));
-        itemEls[nextCursorIdx]?.scrollIntoView({ block: 'start' });
+        const el = itemEls[nextCursorIdx];
+        if (el && navPaneEl) {
+          const elRect   = el.getBoundingClientRect();
+          const paneRect = navPaneEl.getBoundingClientRect();
+          const headerH  = navPaneEl.querySelector('.nav-feed-header')?.offsetHeight ?? 0;
+          const topBound = paneRect.top + headerH;
+          if (elRect.top < topBound) navPaneEl.scrollTop -= topBound - elRect.top;
+          else if (elRect.bottom > paneRect.bottom) navPaneEl.scrollTop += elRect.bottom - paneRect.bottom;
+        }
       }
     } else {
       $collapsedFeeds.delete(feedId);
@@ -940,7 +958,13 @@
       {:else}
         {#each displayItems as item}
           {#if item.type === 'header'}
-            <NavFeedHeader {item} on:collapse={e => toggleFeedCollapse(e.detail)} />
+            <NavFeedHeader {item}
+              on:collapse={e => toggleFeedCollapse(e.detail)}
+              on:markread={e => {
+                const id = e.detail;
+                if (id?.startsWith('feed:')) markFeedRead(Number(id.slice(5)));
+                else if (id?.startsWith('cat:')) markCatRead(item.title);
+              }} />
           {:else}
             <NavItem
               {item}
