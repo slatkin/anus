@@ -3,7 +3,7 @@ module github.com/slatkin/anus
 go 1.25.0
 
 require (
-	codeberg.org/readeck/go-readability/v2 v2.1.1
+	codeberg.org/readeck/go-readability/v2 v2.1.2
 	github.com/BurntSushi/toml v1.6.0
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/wailsapp/wails/v2 v2.12.0
@@ -14,7 +14,6 @@ require (
 require (
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
-	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de // indirect
 	github.com/bep/debounce v1.2.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-shiori/dom v0.0.0-20230515143342-73569d674e1c // indirect
@@ -22,6 +21,7 @@ require (
 	github.com/gogs/chardet v0.0.0-20211120154057-b7413eaefb8f // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
+	github.com/itlightning/dateparse v0.2.1 // indirect
 	github.com/jchv/go-winloader v0.0.0-20210711035445-715c2860da7e // indirect
 	github.com/labstack/echo/v4 v4.13.3 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
