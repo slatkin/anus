@@ -9,6 +9,8 @@ import (
 	"time"
 
 	readability "codeberg.org/readeck/go-readability/v2"
+	"golang.org/x/sync/singleflight"
+
 	"github.com/slatkin/anus/internal/cache"
 	"github.com/slatkin/anus/pkg/miniflux"
 )
@@ -29,7 +31,8 @@ type App struct {
 	client          MinifluxClient
 	cache           *cache.Cache
 	cacheExpiryDays int
-	articleCache    map[int]string
+	articleCache    sync.Map
+	articleFlight   singleflight.Group
 	mu              sync.Mutex
 }
 
@@ -38,7 +41,6 @@ func New(client MinifluxClient, cacheExpiryDays int) *App {
 	return &App{
 		client:          client,
 		cacheExpiryDays: cacheExpiryDays,
-		articleCache:    make(map[int]string),
 	}
 }
 
@@ -88,36 +90,15 @@ func (a *App) FetchCached() (*FetchResult, error) {
 }
 
 func (a *App) FetchEntries() (*FetchResult, error) {
-	const pageSize = 100
-	var fresh []miniflux.FeedEntry
-	var fetchErr error
-
-	for offset := 0; ; {
-		entries, total, err := a.client.GetUnreadEntries(pageSize, offset)
-		if err != nil {
-			fetchErr = err
-			break
-		}
-		fresh = append(fresh, entries...)
-		offset += len(entries)
-		if offset >= total || len(entries) == 0 {
-			break
-		}
-	}
-
+	fresh, fetchErr := paginate(func(limit, offset int) ([]miniflux.FeedEntry, int, error) {
+		return a.client.GetUnreadEntries(limit, offset)
+	})
 	if fetchErr == nil {
 		since := time.Now().AddDate(0, 0, -30)
-		for offset := 0; ; {
-			entries, total, err := a.client.GetReadEntries(since, pageSize, offset)
-			if err != nil {
-				break
-			}
-			fresh = append(fresh, entries...)
-			offset += len(entries)
-			if offset >= total || len(entries) == 0 {
-				break
-			}
-		}
+		read, _ := paginate(func(limit, offset int) ([]miniflux.FeedEntry, int, error) {
+			return a.client.GetReadEntries(since, limit, offset)
+		})
+		fresh = append(fresh, read...)
 	}
 
 	if fetchErr != nil {
@@ -132,69 +113,20 @@ func (a *App) FetchEntries() (*FetchResult, error) {
 		return &FetchResult{Entries: cached, Feeds: buildFeedList(cached)}, nil
 	}
 
-	merged := make([]miniflux.FeedEntry, len(fresh))
-	copy(merged, fresh)
+	merged := fresh
 	if a.cache != nil {
-		freshSet := make(map[int]bool, len(fresh))
-		freshFeedMap := make(map[int]miniflux.Feed, len(fresh))
-		for _, e := range fresh {
-			freshSet[e.ID] = true
-			freshFeedMap[e.FeedID] = e.Feed
-		}
-		cached, _ := a.cache.All()
-		fetchedAtMap := make(map[int]time.Time, len(cached))
-		for _, e := range cached {
-			fetchedAtMap[e.ID] = e.FetchedAt
-		}
-		now := time.Now()
-		for i := range merged {
-			if t, ok := fetchedAtMap[merged[i].ID]; ok {
-				merged[i].FetchedAt = t
-			} else {
-				merged[i].FetchedAt = now
-			}
-		}
-		if err := a.cache.Put(merged[:len(fresh)]); err != nil {
-			log.Printf("cache Put: %v", err)
-		}
-		var toReCache []miniflux.FeedEntry
-		for _, e := range cached {
-			if !freshSet[e.ID] {
-				// Propagate current feed metadata (including category) to stale cached
-				// entries that may have been stored before the Category field existed.
-				if e.Feed.Category.ID == 0 {
-					if f, ok := freshFeedMap[e.FeedID]; ok {
-						e.Feed = f
-						toReCache = append(toReCache, e)
-					}
-				}
-				merged = append(merged, e)
-			}
-		}
-		if len(toReCache) > 0 {
-			if err := a.cache.Put(toReCache); err != nil {
-				log.Printf("cache Put: %v", err)
-			}
-		}
+		merged = a.mergeWithCache(fresh)
 	}
-
 	sortByDate(merged)
 	return &FetchResult{Entries: merged, Feeds: buildFeedList(merged)}, nil
 }
 
 func (a *App) SearchEntries(query string) (*FetchResult, error) {
-	const pageSize = 100
-	var all []miniflux.FeedEntry
-	for offset := 0; ; {
-		entries, total, err := a.client.SearchEntries(query, pageSize, offset)
-		if err != nil {
-			return nil, err
-		}
-		all = append(all, entries...)
-		offset += len(entries)
-		if offset >= total || len(entries) == 0 {
-			break
-		}
+	all, err := paginate(func(limit, offset int) ([]miniflux.FeedEntry, int, error) {
+		return a.client.SearchEntries(query, limit, offset)
+	})
+	if err != nil {
+		return nil, err
 	}
 	sortByDate(all)
 	return &FetchResult{Entries: all, Feeds: buildFeedList(all)}, nil
@@ -216,27 +148,26 @@ func (a *App) ClearCache() (*FetchResult, error) {
 }
 
 func (a *App) FetchArticleContent(id int, url string) (string, error) {
-	a.mu.Lock()
-	if html, ok := a.articleCache[id]; ok {
-		a.mu.Unlock()
-		return html, nil
+	if v, ok := a.articleCache.Load(id); ok {
+		return v.(string), nil
 	}
-	a.mu.Unlock()
-
-	article, err := readability.FromURL(url, 30*time.Second)
+	v, err, _ := a.articleFlight.Do(fmt.Sprintf("%d", id), func() (interface{}, error) {
+		article, err := readability.FromURL(url, 30*time.Second)
+		if err != nil {
+			return "", err
+		}
+		var buf bytes.Buffer
+		if err := article.RenderHTML(&buf); err != nil {
+			return "", err
+		}
+		html := buf.String()
+		a.articleCache.Store(id, html)
+		return html, nil
+	})
 	if err != nil {
 		return "", err
 	}
-	var buf bytes.Buffer
-	if err := article.RenderHTML(&buf); err != nil {
-		return "", err
-	}
-	html := buf.String()
-
-	a.mu.Lock()
-	a.articleCache[id] = html
-	a.mu.Unlock()
-	return html, nil
+	return v.(string), nil
 }
 
 func (a *App) MarkRead(ids []int) error {
@@ -281,6 +212,77 @@ func ApplyConfig(a *App, cacheExpiryDays int) {
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────
+
+// paginate calls fetch repeatedly, advancing offset, until all pages are collected.
+func paginate(fetch func(limit, offset int) ([]miniflux.FeedEntry, int, error)) ([]miniflux.FeedEntry, error) {
+	const pageSize = 100
+	var all []miniflux.FeedEntry
+	for offset := 0; ; {
+		entries, total, err := fetch(pageSize, offset)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, entries...)
+		offset += len(entries)
+		if offset >= total || len(entries) == 0 {
+			break
+		}
+	}
+	return all, nil
+}
+
+// mergeWithCache combines fresh API entries with cached entries, preserving
+// FetchedAt timestamps and propagating up-to-date feed metadata to stale entries.
+func (a *App) mergeWithCache(fresh []miniflux.FeedEntry) []miniflux.FeedEntry {
+	freshSet := make(map[int]bool, len(fresh))
+	freshFeedMap := make(map[int]miniflux.Feed, len(fresh))
+	for _, e := range fresh {
+		freshSet[e.ID] = true
+		freshFeedMap[e.FeedID] = e.Feed
+	}
+
+	cached, _ := a.cache.All()
+	fetchedAtMap := make(map[int]time.Time, len(cached))
+	for _, e := range cached {
+		fetchedAtMap[e.ID] = e.FetchedAt
+	}
+
+	merged := make([]miniflux.FeedEntry, len(fresh))
+	copy(merged, fresh)
+	now := time.Now()
+	for i := range merged {
+		if t, ok := fetchedAtMap[merged[i].ID]; ok {
+			merged[i].FetchedAt = t
+		} else {
+			merged[i].FetchedAt = now
+		}
+	}
+	if err := a.cache.Put(merged); err != nil {
+		log.Printf("cache Put: %v", err)
+	}
+
+	var toReCache []miniflux.FeedEntry
+	for _, e := range cached {
+		if freshSet[e.ID] {
+			continue
+		}
+		// Propagate current feed metadata (including category) to stale cached
+		// entries that may have been stored before the Category field existed.
+		if e.Feed.Category.ID == 0 {
+			if f, ok := freshFeedMap[e.FeedID]; ok {
+				e.Feed = f
+				toReCache = append(toReCache, e)
+			}
+		}
+		merged = append(merged, e)
+	}
+	if len(toReCache) > 0 {
+		if err := a.cache.Put(toReCache); err != nil {
+			log.Printf("cache Put: %v", err)
+		}
+	}
+	return merged
+}
 
 func sortByDate(entries []miniflux.FeedEntry) {
 	sort.Slice(entries, func(i, j int) bool {

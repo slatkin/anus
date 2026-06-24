@@ -1,13 +1,30 @@
 export function processContent(html) {
   if (!html) return html;
-  html = html.replace(/<a\b[^>]*>\s*View Image in Fullscreen\s*<\/a>/gi, '');
-  // Strip width/height attrs so hotlink-protected images (200 OK, blank body)
-  // don't reserve space proportional to their declared dimensions.
-  html = html.replace(/<img(\s[^>]*?)>/gi, (_, attrs) => {
+  html = stripFullscreenLinks(html);
+  html = stripImageDimensions(html);
+  html = replaceYouTubeEmbeds(html);
+  const doc = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html');
+  cleanFigureCaptions(doc);
+  wrapBareImageFigures(doc);
+  wrapBrParagraphs(doc);
+  return doc.body.innerHTML;
+}
+
+function stripFullscreenLinks(html) {
+  return html.replace(/<a\b[^>]*>\s*View Image in Fullscreen\s*<\/a>/gi, '');
+}
+
+// Strip width/height attrs so hotlink-protected images (200 OK, blank body)
+// don't reserve space proportional to their declared dimensions.
+function stripImageDimensions(html) {
+  return html.replace(/<img(\s[^>]*?)>/gi, (_, attrs) => {
     const cleaned = attrs.replace(/\s+(width|height)=["'][^"']*["']/gi, '');
     return `<img${cleaned}>`;
   });
-  html = html.replace(
+}
+
+function replaceYouTubeEmbeds(html) {
+  return html.replace(
     /<iframe[^>]*src=["']https?:\/\/(?:www\.)?youtube(?:-nocookie)?\.com\/embed\/([a-zA-Z0-9_-]+)[^"']*["'][^>]*>(?:<\/iframe>)?/gi,
     (_, id) =>
       `<div class="yt-thumb" data-yt-url="https://www.youtube.com/watch?v=${id}">` +
@@ -16,9 +33,11 @@ export function processContent(html) {
       `<span class="yt-play">▶ Watch on YouTube</span>` +
       `</div>`
   );
-  // Clean up figure/figcaption: remove non-image nodes before <figcaption>
-  // (some feeds duplicate caption text as siblings before the figcaption).
-  const doc = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html');
+}
+
+// Removes non-image nodes that appear before <figcaption> inside <figure>.
+// Some feeds duplicate caption text as siblings before the figcaption.
+function cleanFigureCaptions(doc) {
   doc.querySelectorAll('figure').forEach(fig => {
     const cap = fig.querySelector(':scope > figcaption');
     if (!cap) return;
@@ -30,34 +49,33 @@ export function processContent(html) {
       if (!isImg) node.remove();
     }
   });
+}
 
-  // Ars Technica (and similar feeds) emit images as bare <a><img></a> followed
-  // by a plain-text caption node — no <figure> wrapper. The caption text also
-  // repeats itself (sometimes multiple times) in the same text node.
-  // Wrap each image link + its caption text in <figure><figcaption> so CSS
-  // can style them, and strip the duplicated text.
-  function deduplicateCaption(rawText) {
-    const text = rawText.trim();
-    const len = text.length;
-    if (!len) return '';
-    // Minimum prefix length to test — long enough to avoid coincidental matches.
-    const minLen = Math.max(10, Math.floor(len * 0.08));
-    for (let i = minLen; i <= Math.floor(len * 0.7); i++) {
-      // If the text starting at position i begins with the same characters as
-      // the text from position 0, the caption repeats — keep only the first copy.
-      if (text.slice(i).trimStart().startsWith(text.slice(0, minLen))) {
-        return text.slice(0, i).trimEnd();
-      }
+// Returns the first non-repeating prefix of rawText, stripping duplicated captions.
+// Minimum prefix length avoids coincidental matches on short strings.
+function deduplicateCaption(rawText) {
+  const text = rawText.trim();
+  const len = text.length;
+  if (!len) return '';
+  const minLen = Math.max(10, Math.floor(len * 0.08));
+  for (let i = minLen; i <= Math.floor(len * 0.7); i++) {
+    if (text.slice(i).trimStart().startsWith(text.slice(0, minLen))) {
+      return text.slice(0, i).trimEnd();
     }
-    return text;
   }
+  return text;
+}
 
+// Wraps bare <a><img></a> links followed by a text node into <figure><figcaption>.
+// Handles feeds (e.g. Ars Technica) that emit image links without <figure> markup,
+// and strips repeated caption text within the same text node.
+function wrapBareImageFigures(doc) {
   doc.querySelectorAll('a').forEach(link => {
-    if (link.closest('figure')) return;              // already inside a figure
-    if (!link.querySelector('img')) return;          // not an image link
-    if (link.textContent.trim()) return;             // link has visible text (alt text etc.)
+    if (link.closest('figure')) return;
+    if (!link.querySelector('img')) return;
+    if (link.textContent.trim()) return;
     const next = link.nextSibling;
-    if (!next || next.nodeType !== 3) return;        // no following text node
+    if (!next || next.nodeType !== 3) return;
     const caption = deduplicateCaption(next.textContent);
     if (!caption) return;
 
@@ -67,22 +85,21 @@ export function processContent(html) {
     const figcap = doc.createElement('figcaption');
     figcap.textContent = caption;
     figure.appendChild(figcap);
-    next.remove();  // removes entire text node (incl. any orphan gallery captions within)
+    next.remove();
   });
+}
 
-  // Some feeds (e.g. plain-HTML sites) use <br> instead of <p> tags, which
-  // produces very tight line spacing because our CSS only styles <p>. Walk
-  // block-level containers and wrap inline segments (separated by <br>) into
-  // <p> tags, while leaving existing block children in place.
-  const IS_BLOCK = new Set(['P','DIV','H1','H2','H3','H4','H5','H6',
-    'UL','OL','LI','TABLE','BLOCKQUOTE','FIGURE','FIGCAPTION','PRE',
-    'SECTION','ARTICLE','HEADER','FOOTER','ASIDE','NAV']);
+const IS_BLOCK = new Set(['P','DIV','H1','H2','H3','H4','H5','H6',
+  'UL','OL','LI','TABLE','BLOCKQUOTE','FIGURE','FIGCAPTION','PRE',
+  'SECTION','ARTICLE','HEADER','FOOTER','ASIDE','NAV']);
+
+// Converts <br>-separated inline runs into <p> tags within block containers.
+// Some feeds use <br> instead of <p>, producing tight spacing with our CSS.
+function wrapBrParagraphs(doc) {
   doc.querySelectorAll('body, div, section, article').forEach(block => {
-    // Only process blocks that have at least one direct <br> child.
     if (![...block.children].some(c => c.tagName === 'BR')) return;
-    // Walk children: collect inline runs between <br> or block elements.
     const children = [...block.childNodes];
-    const segments = []; // [{type:'inline'|'block', nodes:[]}]
+    const segments = [];
     let run = [];
     for (const n of children) {
       const isBlock = n.nodeType === 1 && IS_BLOCK.has(n.tagName);
@@ -97,7 +114,6 @@ export function processContent(html) {
       }
     }
     if (run.length) segments.push({type: 'inline', nodes: run});
-    // Only rewrite if at least one inline segment has visible content.
     const hasInline = segments.some(s => s.type === 'inline' && s.nodes.some(n =>
       n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim())
     ));
@@ -118,8 +134,6 @@ export function processContent(html) {
       }
     }
   });
-
-  return doc.body.innerHTML;
 }
 
 const _HIGHLIGHT_SKIP = new Set(['SCRIPT', 'STYLE', 'PRE', 'CODE']);
