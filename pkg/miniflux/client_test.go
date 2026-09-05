@@ -188,43 +188,6 @@ func TestGetReadEntriesServerError(t *testing.T) {
 	}
 }
 
-// --- GetStarredEntries ---
-
-func TestGetStarredEntriesSuccess(t *testing.T) {
-	entries := []FeedEntry{{ID: 5, Title: "Starred", Starred: true}}
-	resp := FeedEntriesResponse{Total: 1, Entries: entries}
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("starred") != "true" {
-			t.Errorf("expected starred=true query param, got: %s", r.URL.RawQuery)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(marshalJSON(resp))
-	}))
-	defer ts.Close()
-
-	c := newTestClient(ts.URL)
-	got, total, err := c.GetStarredEntries(10, 0)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if total != 1 || len(got) != 1 || got[0].ID != 5 {
-		t.Errorf("unexpected result: total=%d entries=%+v", total, got)
-	}
-}
-
-func TestGetStarredEntriesServerError(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "fail", http.StatusUnauthorized)
-	}))
-	defer ts.Close()
-
-	c := newTestClient(ts.URL)
-	_, _, err := c.GetStarredEntries(10, 0)
-	if err == nil {
-		t.Error("expected error, got nil")
-	}
-}
-
 // --- SearchEntries ---
 
 func TestSearchEntriesSuccess(t *testing.T) {
@@ -392,21 +355,6 @@ func TestSaveEntryServerError(t *testing.T) {
 	}
 }
 
-// --- MarkAllAsRead ---
-
-func TestMarkAllAsReadSuccess(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer ts.Close()
-
-	c := newTestClient(ts.URL)
-	err := c.MarkAllAsRead([]int{1, 2, 3})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
 // --- RefreshAllFeeds ---
 
 func TestRefreshAllFeedsSuccess(t *testing.T) {
@@ -435,39 +383,6 @@ func TestRefreshAllFeedsServerError(t *testing.T) {
 
 	c := newTestClient(ts.URL)
 	err := c.RefreshAllFeeds()
-	if err == nil {
-		t.Error("expected error, got nil")
-	}
-}
-
-// --- FetchOriginalContent ---
-
-func TestFetchOriginalContentSuccess(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := OriginalContentResponse{Content: "<p>full article</p>"}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(marshalJSON(resp))
-	}))
-	defer ts.Close()
-
-	c := newTestClient(ts.URL)
-	got, err := c.FetchOriginalContent(7)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got != "<p>full article</p>" {
-		t.Errorf("content = %q, want %q", got, "<p>full article</p>")
-	}
-}
-
-func TestFetchOriginalContentServerError(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "fail", http.StatusNotFound)
-	}))
-	defer ts.Close()
-
-	c := newTestClient(ts.URL)
-	_, err := c.FetchOriginalContent(7)
 	if err == nil {
 		t.Error("expected error, got nil")
 	}

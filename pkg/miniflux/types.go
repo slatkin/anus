@@ -9,13 +9,6 @@ const (
 	ReadStatusUnread ReadStatus = "unread"
 )
 
-func (r ReadStatus) Toggle() ReadStatus {
-	if r == ReadStatusRead {
-		return ReadStatusUnread
-	}
-	return ReadStatusRead
-}
-
 type Category struct {
 	ID    int    `json:"id"`
 	Title string `json:"title"`
@@ -40,8 +33,6 @@ type FeedEntry struct {
 	Starred     bool       `json:"starred"`
 	PublishedAt     time.Time `json:"published_at"`
 	FetchedAt       time.Time `json:"fetched_at,omitempty"`
-	// OriginalContent is optional
-	OriginalContent string `json:"original_content,omitempty"`
 }
 
 type FeedEntriesResponse struct {
@@ -52,8 +43,4 @@ type FeedEntriesResponse struct {
 type UpdateEntriesRequest struct {
 	Status   string `json:"status,omitempty"`
 	EntryIDs []int  `json:"entry_ids"`
-}
-
-type OriginalContentResponse struct {
-	Content string `json:"content"`
 }

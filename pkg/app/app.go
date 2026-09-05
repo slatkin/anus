@@ -205,12 +205,6 @@ func (a *App) SaveEntry(id int) error {
 	return a.client.SaveEntry(id)
 }
 
-func ApplyConfig(a *App, cacheExpiryDays int) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.cacheExpiryDays = cacheExpiryDays
-}
-
 // ── helpers ───────────────────────────────────────────────────────────────
 
 // paginate calls fetch repeatedly, advancing offset, until all pages are collected.

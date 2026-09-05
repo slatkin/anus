@@ -115,21 +115,6 @@ func (c *Client) GetReadEntries(since time.Time, limit, offset int) ([]FeedEntry
 	return result.Entries, result.Total, nil
 }
 
-func (c *Client) GetStarredEntries(limit, offset int) ([]FeedEntry, int, error) {
-	path := fmt.Sprintf("/v1/entries?starred=true&order=published_at&direction=desc&limit=%d&offset=%d", limit, offset)
-	resp, err := c.doRequest("GET", path, nil)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	var result FeedEntriesResponse
-	if err := json.Unmarshal(resp, &result); err != nil {
-		return nil, 0, err
-	}
-	c.fixProxyURLs(result.Entries)
-	return result.Entries, result.Total, nil
-}
-
 func (c *Client) ChangeEntryReadStatus(entryIDs []int, status ReadStatus) error {
 	req := UpdateEntriesRequest{
 		Status:   string(status),
@@ -152,10 +137,6 @@ func (c *Client) SaveEntry(entryID int) error {
 	return err
 }
 
-func (c *Client) MarkAllAsRead(entryIDs []int) error {
-	return c.ChangeEntryReadStatus(entryIDs, ReadStatusRead)
-}
-
 func (c *Client) RefreshAllFeeds() error {
 	_, err := c.doRequest("PUT", "/v1/feeds/refresh", nil)
 	return err
@@ -174,17 +155,4 @@ func (c *Client) SearchEntries(query string, limit, offset int) ([]FeedEntry, in
 	}
 	c.fixProxyURLs(result.Entries)
 	return result.Entries, result.Total, nil
-}
-
-func (c *Client) FetchOriginalContent(entryID int) (string, error) {
-	path := fmt.Sprintf("/v1/entries/%d/fetch-content", entryID)
-	resp, err := c.doRequest("GET", path, nil)
-	if err != nil {
-		return "", err
-	}
-	var result OriginalContentResponse
-	if err := json.Unmarshal(resp, &result); err != nil {
-		return "", err
-	}
-	return result.Content, nil
 }
