@@ -97,8 +97,7 @@ The `model=` parameter rides on the existing `plan_turn` call — it does **not*
 
 ```bash
 # Development
-make dev-ui    # Wails hot-reload desktop dev server (VITE_API=wails)
-make dev-web   # Go API on :8080 + Vite dev server on :5173 (web mode)
+make dev      # Go API on :8080 + Vite dev server on :5173
 
 # Testing
 make test                                  # go test ./...
@@ -108,18 +107,11 @@ cd frontend && npm test                    # frontend tests (Vitest)
 
 ## Architecture
 
-The app is a frontend for [Miniflux](https://miniflux.app/) RSS that runs in **two deployment modes** from the same codebase:
-
-- **Desktop (anus-ui):** Wails v2 app — Go backend bound directly to the WebKit2GTK webview. Entry point: [main.go](main.go).
-- **Web (anus-web):** Go HTTP server serving the frontend as static files + `/api/*` JSON endpoints. Entry point: [cmd/anus-web/main.go](cmd/anus-web/main.go).
+The app is a self-hosted web frontend for [Miniflux](https://miniflux.app/) RSS: a Go HTTP server serving the Svelte frontend as embedded static files plus `/api/*` JSON endpoints. Entry point: [main.go](main.go) — built with `-tags production` to embed the frontend.
 
 ### Frontend-Backend Connection
 
-The Vite build aliases `./api.js` at build time based on the `VITE_API` env var:
-- `VITE_API=wails` → [frontend/src/api.wails.js](frontend/src/api.wails.js) — calls Wails Go bindings (FFI)
-- `VITE_API=web` → [frontend/src/api.web.js](frontend/src/api.web.js) — makes HTTP fetch calls
-
-In web dev mode, Vite proxies `/api/*` to the Go server on :8080.
+[frontend/src/api.js](frontend/src/api.js) makes HTTP `fetch` calls to the `/api/*` endpoints. In dev mode, Vite proxies `/api/*` to the Go server on :8080.
 
 ### Frontend Structure
 
