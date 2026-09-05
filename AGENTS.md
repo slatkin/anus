@@ -79,6 +79,8 @@ The `model=` parameter rides on the existing `plan_turn` call — it does **not*
 
 ## Rules
 
+**START FROM LATEST ORIGIN.** Before beginning any work, `git fetch origin` and rebase onto the most recent HEAD of the target branch so work never diverges from the remote.
+
 **NEVER ADD CO-AUTHORED-BY.** Do not add `Co-Authored-By` trailers to commit messages.
 
 **NEVER GUESS.** Read the source before assuming anything. Use the repo's code exploration tooling first.
