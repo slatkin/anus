@@ -71,8 +71,6 @@ export function OpenURL(url) {
   window.open(url, '_blank', 'noopener,noreferrer');
 }
 
-export function Show() {}
-
 export async function GetConfig() {
   const res = await fetch('/api/config', { signal: signal() });
   if (!res.ok) throw new Error(await res.text());

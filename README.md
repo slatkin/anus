@@ -2,15 +2,7 @@
 
 **A newsreader, unfussy & simple.**
 
-anus is a [Miniflux](https://miniflux.app/) reader available as both a native Linux desktop app and a self-hosted web service. It was built with Go, Svelte, and [Wails v2](https://wails.io/). As I would never have the time to spend making something so niche on my own in my free time, this is a vibe-coding project and could possibly result in the end of human civilisation.
-
-anus can be used two ways: as a local client or as a web service running in a docker container.
-
-| | `anus-ui` | `anus-web` |
-|---|---|---|
-| **What** | Native desktop app (WebKit2GTK) | Containerised web service |
-| **Install** | AUR (`anus`) or build from source | Docker / `docker compose` |
-| **Config** | `~/.config/anus/config.toml` | Settings UI or environment variables, persisted to `/data/config.toml` |
+anus is a self-hosted [Miniflux](https://miniflux.app/) reader that runs as a web service in a Docker container. It was built with Go and Svelte. As I would never have the time to spend making something so niche on my own in my free time, this is a vibe-coding project and could possibly result in the end of human civilisation.
 
 ---
 
@@ -70,56 +62,6 @@ In your Miniflux instance: **Settings → API Keys → Create a new API key**. C
 
 ---
 
-## anus-ui (Desktop)
-
-### Requirements
-
-- Linux with WebKit2GTK 4.1 (`webkit2gtk-4.1`)
-- [Miniflux](https://miniflux.app/) server with API access
-
-### Installation
-
-#### AUR (Arch / CachyOS)
-
-```bash
-# Binary release
-paru -S anus
-
-# Build from source
-paru -S anus-git
-```
-
-#### Build from source
-
-```bash
-# Dependencies
-sudo pacman -S wails webkit2gtk-4.1 gtk3 nodejs npm imagemagick
-
-git clone https://github.com/slatkin/anus ~/Dev/anus
-cd ~/Dev/anus
-make build-ui          # builds to build/bin/anus
-make install           # installs binary, .desktop file, and icons to ~/.local
-```
-
-### Configuration
-
-Initialise a config file on first run:
-
-```bash
-anus --init
-$EDITOR ~/.config/anus/config.toml
-```
-
-```toml
-api_key            = "your-miniflux-api-key"
-server_url         = "https://your-miniflux-instance.example.com"
-allow_invalid_certs = false
-cache_expiry_days  = 30
-remember_read_position = true
-```
-
----
-
 ## Keyboard shortcuts
 
 ### Navigation
@@ -176,8 +118,8 @@ In grouped modes, click a group header to collapse or expand it. The collapse-al
 ## Development
 
 ```bash
-make dev-ui     # Wails hot-reload dev server (desktop)
-make dev-web    # Go API on :8080 + Vite dev server on :5173 (web)
+make dev        # Go API on :8080 + Vite dev server on :5173
+make build      # frontend + production binary to build/bin/anus
 make test       # go test ./...
 make fmt        # gofmt
 make vet        # go vet

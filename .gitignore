@@ -1,7 +1,6 @@
 build/
 frontend/dist/
 frontend/node_modules/
-/wailsjs/
 *.db
 /anus
 /anus-web

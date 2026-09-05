@@ -1,125 +1,92 @@
 package main
 
 import (
-	"context"
-	"flag"
+	"encoding/json"
 	"fmt"
+	"io/fs"
+	"log"
+	"net/http"
 	"os"
 
-	"github.com/pkg/browser"
-	"github.com/slatkin/anus/frontend"
 	"github.com/slatkin/anus/internal/cache"
 	"github.com/slatkin/anus/pkg/app"
 	"github.com/slatkin/anus/pkg/config"
 	"github.com/slatkin/anus/pkg/miniflux"
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/linux"
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-type App struct {
-	*app.App
-	cfg config.Config
-	ctx context.Context
-}
-
-func newApp(cfg config.Config) *App {
-	client := miniflux.NewClient(cfg.ServerUrl, cfg.ApiKey, cfg.AllowInvalidCerts)
-	return &App{
-		App: app.New(client, cfg.CacheExpiryDays),
-		cfg: cfg,
-	}
-}
-
-func (a *App) Show() {
-	wailsruntime.WindowShow(a.ctx)
-}
-
-func (a *App) startup(ctx context.Context) {
-	a.ctx = ctx
-	dir := a.cfg.CacheDir
-	if dir == "" {
-		var err error
-		dir, err = cache.DefaultDir()
-		if err != nil {
-			fmt.Printf("Warning: could not determine cache dir: %v\n", err)
-			return
-		}
-	}
-	if err := a.App.Open(dir); err != nil {
-		fmt.Printf("Warning: %v\n", err)
-	}
-}
-
-func (a *App) shutdown(_ context.Context) {
-	a.App.Close()
-}
-
-func (a *App) GetConfig() config.Config {
-	return a.cfg
-}
-
-func (a *App) SaveConfig(cfg config.Config) error {
-	path, err := config.GetConfigFilepath()
-	if err != nil {
-		return err
-	}
-	if err := config.Save(cfg, path); err != nil {
-		return err
-	}
-	a.cfg = cfg
-	app.ApplyConfig(a.App, cfg.CacheExpiryDays)
-	return nil
-}
-
-func (a *App) OpenURL(url string) {
-	browser.OpenURL(url) //nolint
-}
+// startupHooks are registered by frontend_dev.go or frontend_prod.go via init().
+var startupHooks []func(*http.ServeMux)
 
 func main() {
-	initFlag := flag.Bool("init", false, "Initialize default configuration file")
-	flag.Parse()
-
-	if *initFlag {
-		path, err := config.Init()
-		if err != nil {
-			fmt.Printf("Error initializing config: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Printf("Wrote default configuration file to %s\n", path)
-		os.Exit(0)
-	}
-
 	cfg, err := config.Load()
 	if err != nil {
-		fmt.Printf("Error loading config: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("config error: %v", err)
 	}
 
-	a := newApp(cfg)
+	cacheDir := cfg.CacheDir
+	if cacheDir == "" {
+		cacheDir, err = cache.DefaultDir()
+		if err != nil {
+			log.Fatalf("cache dir error: %v", err)
+		}
+	}
 
-	err = wails.Run(&options.App{
-		Title:  "anus",
-		Width:  1200,
-		Height: 800,
-		AssetServer: &assetserver.Options{
-			Assets: frontend.FS,
-		},
-		BackgroundColour:         &options.RGBA{R: 0, G: 0, B: 0, A: 0},
-		StartHidden:              true,
-		EnableDefaultContextMenu: true,
-		OnStartup:                a.startup,
-		OnShutdown:               a.shutdown,
-		Bind:                     []interface{}{a},
-		Linux: &linux.Options{
-			ProgramName:         "anus",
-			WindowIsTranslucent: true,
-		},
-	})
+	client := miniflux.NewClient(cfg.ServerUrl, cfg.ApiKey, cfg.AllowInvalidCerts)
+	a := app.New(client, cfg.CacheExpiryDays)
+	if err := a.Open(cacheDir); err != nil {
+		log.Printf("Warning: %v (running without cache)", err)
+	}
+	defer a.Close()
+
+	mux := http.NewServeMux()
+	registerAPI(mux, a, cfg)
+	for _, hook := range startupHooks {
+		hook(mux)
+	}
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Printf("anus-web listening on :%s", port)
+	log.Fatal(http.ListenAndServe(":"+port, mux))
+}
+
+func registerAPI(mux *http.ServeMux, a *app.App, cfg config.Config) {
+	mux.HandleFunc("GET /api/cached", handleGetCached(a))
+	mux.HandleFunc("GET /api/entries", handleGetEntries(a))
+	mux.HandleFunc("POST /api/mark-read", handleMarkRead(a))
+	mux.HandleFunc("POST /api/mark-unread", handleMarkUnread(a))
+	mux.HandleFunc("POST /api/toggle-star", handleToggleStar(a))
+	mux.HandleFunc("POST /api/save-entry", handleSaveEntry(a))
+	mux.HandleFunc("POST /api/refresh-and-fetch", handleRefreshAndFetch(a))
+	mux.HandleFunc("POST /api/clear-cache", handleClearCache(a))
+	mux.HandleFunc("GET /api/search", handleSearch(a))
+	mux.HandleFunc("GET /api/config", handleGetConfig(&cfg))
+	mux.HandleFunc("POST /api/config", handlePostConfig(&cfg))
+	mux.HandleFunc("GET /api/fetch-content", handleFetchContent(a))
+}
+
+// serveFrontend registers a handler that serves the embedded frontend dist.
+// Called from the embed wrapper (embed.go) which is only compiled in production builds.
+func serveFrontend(mux *http.ServeMux, distFS fs.FS) {
+	sub, err := fs.Sub(distFS, "dist")
 	if err != nil {
-		fmt.Printf("Error: %v\n", err)
-		os.Exit(1)
+		panic(fmt.Sprintf("frontend embed error: %v", err))
+	}
+	fileServer := http.FileServer(http.FS(sub))
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Serve index.html for any non-asset path (SPA routing).
+		if _, err := fs.Stat(sub, r.URL.Path[1:]); err != nil {
+			r.URL.Path = "/"
+		}
+		fileServer.ServeHTTP(w, r)
+	}))
+}
+
+func writeJSON(w http.ResponseWriter, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("json encode error: %v", err)
 	}
 }

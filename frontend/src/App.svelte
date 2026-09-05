@@ -1,6 +1,6 @@
 <script>
   import { onMount, onDestroy, tick } from 'svelte';
-  import { FetchCached, FetchEntries, RefreshAndFetch, ClearCache, FetchArticleContent, MarkRead, MarkUnread, ToggleStar, SaveEntry, SearchEntries, OpenURL, Show, GetConfig, SaveConfig } from './api.js';
+  import { FetchCached, FetchEntries, RefreshAndFetch, ClearCache, FetchArticleContent, MarkRead, MarkUnread, ToggleStar, SaveEntry, SearchEntries, OpenURL, GetConfig, SaveConfig } from './api.js';
   import { ChevronsDownUp, ChevronsUpDown, Search, Settings } from 'lucide-svelte';
   import NavFeedHeader from './components/NavFeedHeader.svelte';
   import NavItem from './components/NavItem.svelte';
@@ -310,7 +310,6 @@
     window.addEventListener('mousemove', onMousemove);
     await loadCached();
     await tick();
-    Show();
     fetchEntries(true);
     const cfg = await GetConfig().catch(() => null);
     const intervalMs = (cfg?.polling_interval_minutes ?? 10) > 0
@@ -1025,7 +1024,7 @@
   </div><!-- /left-col -->
 
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions a11y_no_noninteractive_tabindex -->
-    <div class="splitter" role="separator" aria-label="Resize navigation panel" aria-valuenow={$navWidth} aria-valuemin={160} aria-valuemax={600} tabindex="0" class:hidden={$navCollapsed} class:web={import.meta.env.VITE_API !== 'wails'} on:mousedown={startNavResize} on:keydown={e => (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && startNavResize(e)}></div>
+    <div class="splitter" role="separator" aria-label="Resize navigation panel" aria-valuenow={$navWidth} aria-valuemin={160} aria-valuemax={600} tabindex="0" class:hidden={$navCollapsed} on:mousedown={startNavResize} on:keydown={e => (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && startNavResize(e)}></div>
 
     <div class="reader-pane" bind:this={readerEl} bind:clientWidth={readerWidth} bind:clientHeight={readerHeight}>
       {#if selectedEntry}
@@ -1269,10 +1268,9 @@
     width: 5px;
     flex-shrink: 0;
     cursor: col-resize;
-    background: transparent;
+    background: #1a1b26;
     transition: background 120ms ease;
   }
-  .splitter.web { background: #1a1b26; }
   .splitter:hover, .splitter:active { background: rgba(122, 162, 247, 0.25); }
   .splitter.hidden { width: 0; pointer-events: none; }
 

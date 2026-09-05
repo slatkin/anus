@@ -3,11 +3,10 @@ import { readFileSync } from 'fs'
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 
-const apiMode = process.env.VITE_API ?? 'web'
 let appVersion = ''
 try {
-  const wailsJson = JSON.parse(readFileSync(path.resolve(__dirname, '../wails.json'), 'utf-8'))
-  appVersion = wailsJson?.info?.productVersion ?? ''
+  const pkg = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'))
+  appVersion = pkg?.version ?? ''
 } catch {}
 
 export default defineConfig({
@@ -24,14 +23,6 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': 'http://localhost:8080',
-    },
-  },
-  resolve: {
-    alias: {
-      './api.js': path.resolve(
-        __dirname,
-        apiMode === 'wails' ? 'src/api.wails.js' : 'src/api.web.js'
-      ),
     },
   },
 })
